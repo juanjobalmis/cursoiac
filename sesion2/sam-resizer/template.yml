@@ -1,0 +1,93 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless image resizing application
+
+Parameters:
+  SubscriptionEmail:
+    Type: String
+    Description: Email para recibir notificaciones
+  BucketName:
+    Type: String
+    Description: Nombre del bucket para almacenar imágenes
+  SourcePrefix:
+    Type: String
+    Description: Prefijo (carpeta) donde subir imágenes
+    Default: original/
+  ResizedPrefix:
+    Type: String
+    Description: Prefijo (carpeta) donde almacenar imágenes redimensionadas
+    Default: resized/
+  ImageWidth:
+    Type: Number
+    Description: Width to resize images to
+    Default: 800
+
+Resources:
+  MySNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !Ref SubscriptionEmail
+          Protocol: email
+
+  TopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      PolicyDocument:
+        Statement:
+          - Sid: AllowServices
+            Effect: Allow
+            Principal:
+              Service:
+                - s3.amazonaws.com
+            Action: 'sns:Publish'
+            Resource:
+              - !Ref MySNSTopic
+      Topics:
+        - !Ref MySNSTopic
+
+  ImageBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: !Ref SourcePrefix
+            Function: !GetAtt ImageResizeFunction.Arn
+        TopicConfigurations:
+          - Event: s3:ObjectCreated:*
+            Topic: !Ref MySNSTopic
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: !Ref ResizedPrefix
+
+  ImageResizeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Role: !Sub arn:aws:iam::${AWS::AccountId}:role/LabRole
+      CodeUri: ./src
+      Handler: app.handler
+      Runtime: nodejs22.x
+      Timeout: 30
+      MemorySize: 1024
+      Environment:
+        Variables:
+          BUCKET_NAME: !Ref BucketName
+          RESIZED_PREFIX: !Ref ResizedPrefix
+          IMAGE_WIDTH: !Ref ImageWidth
+
+  BucketPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref ImageResizeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:s3:::${BucketName}

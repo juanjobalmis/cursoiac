@@ -1,0 +1,42 @@
+<img src="https://upload.wikimedia.org/wikipedia/commons/0/04/Terraform_Logo.svg" height="100">
+
+# Terraform
+
+## En este espacio os ofrecemos los recursos que hemos elaborado para Terraform:
+
+### [Presentación con los conocimientos básicos sobre Terraform](https://formacioncloud.github.io/IaC/03_terraform) y que abarca:
+  ⚪ Instalación y configuración básica de Terraform<br>
+  ⚪ Estructura básica de un proyecto<br>
+  ⚪ Lenguaje HCL<br>
+  ⚪ Terraform CLI<br>
+  ⚪ Variables (Local Values, Input Variables), Outputs<br>
+  ⚪ Providers, Resources, DataSources<br>
+  ⚪ Mapeo y gráfico de dependencias y grafico<br>
+  ⚪ Gestión del estado<br>
+  ⚪ Workspaces<br>
+  ⚪ Aspectos avanzados (I): Modules, Expressions, Functions<br>
+  ⚪ Aspectos avanzados (II): Provisioners<br>
+
+### Práctica **[Terraform en AWS – Infraestructura para aplicación web](./practica-terraform-aws)**
+  En esta práctica construiremos desde cero una infraestructura en AWS usando Terraform. 
+  
+  **Desplegaremos una aplicación web (WordPress) preparada para alta disponibilidad**:<br> 
+    -Infraestructura de red y Nat Gateway <br>
+    -Cortafuegos<br>
+    -Servidores web EC2 en múltiples AZs (inicialmente sólo uno) <br>
+    -Un balanceador de carga sobre Target Group<br>
+    -Un Autoscaling group asociado <br>
+    -Base de datos gestionada (Amazon RDS)<br> 
+    -Sistema de archivos compartido (Amazon EFS) que contendrá tanto código como assets. <br>
+
+![Arquitectura final](./practica-terraform-aws/imagenes/infraestructura_final.jpg)
+  
+  A lo largo del proceso, **reforzaremos conceptos claves de Terraform** (proveedores, recursos, variables, estado, etc.) y de AWS (VPC, subredes, grupos de seguridad, roles IAM, autoescalado, balanceador de carga, EC2, RDS, user-data, etc.), y tareas extra para resolver.
+
+### Añadido [Apartados extra Terraform en AWS](./practica-terraform-aws/apartados_extra_aws.md)
+
+Proponemos una serie de **ampliaciones y mejoras en la práctica**, de las que no proporcionamos resolución directa pero sí indicaciones y que parten de la infraestructura completa, a implementar lógicamente en el código de Terraform y ser aplicadas posteriormente.
+
+### Práctica **Terraform en Azure – Infraestructura para aplicación web**
+  Misma infraestructura traducida a Azure, la cual analizaremos en relación a la anterior.
+  
