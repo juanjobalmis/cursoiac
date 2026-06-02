@@ -1,4 +1,4 @@
-# Práctica de Laboratorio de AWS
+# Prácticas IaC Iniciales en AWS y Azure
 
 ## Infraestructura como Código (IaC)
 
@@ -35,9 +35,13 @@ Es otra herramienta de IaC que nos permite definir nuestra infraestructura utili
 Creamos un nuevo entrono llamado **`ServidorIaC`** que el profesor va a poder gestionar desde la nube. Elegimos un **`t3.small`**. Elegimos SSH para poder entrar en la máquina por ejemplo desde Visual Studio Code. Y por último, le damos a crear entorno. Deberíamos **cambiar el disco EBS a 30 GB** para tener más espacio para trabajar. Para ello:
 
 1. Vamos a la consola de EC2.
+
 2. Seleccionamos la instancia de Cloud9 que acabamos de crear.
+
 3. En la pestaña de **`Almacenamiento`**, seleccionamos el volumen EBS asociado a la instancia.
+
 4. Seleccionamos el volumen y el botón **`Acciones`** arriba ala derecha y luego la opción **`Modificar volumen`**.
+
 5. Vuelvo a la consola de Cloud9 y abro el entorno que he creado y en el terminal ejecuto.
 
     ```bash
@@ -58,4 +62,83 @@ Creamos un nuevo entrono llamado **`ServidorIaC`** que el profesor va a poder ge
 7. Desactivamos la opción "**AWS managed temporary credentials**" para que el entorno de Cloud9 utilice las credenciales del rol de IAM que hemos asignado a la instancia. Como se muestra en la siguiente imagen:
 
     ![alt text](captura.png)
+
+## Practica 1: Crear una pila de CloudFormation
+
+Carpeta [sesion2/cloudformation/ReADME.md](../../sesion2/cloudformation/README.md)
+
+## Practica 2: Crear una pila de Terraform en AWS
+
+Carpeta [sesion2/terraform-vpc-instance/README.md](../../sesion2/terraform-vpc-instance/README.md)
+
+Pasos:
+
+1. Instalar Terraform
+
+    Amazon Linux 2023 **no trae Terraform preinstalado**. Instálalo así:
+
+    ```bash
+    sudo dnf install -y yum-utils
+    sudo yum-config-manager --add-repo https://rpm.releases.hashicorp.com/AmazonLinux/hashicorp.repo
+    sudo dnf install -y terraform
+    ```
+
+    Verifica que se ha instalado correctamente:
+
+    ```bash
+    terraform -v
+    ```
+
+2. Comprobar que Terraform tiene acceso a las credenciales de AWS
+
+    Comprueba que puedes ejecutar comandos sin error:
+
+    ```bash
+    aws sts get-caller-identity
+    ```
+
+3. Me situo donde está el scrip HCL de Terraform, en la carpeta **`sesion2/terraform-vpc-instance`**.
+
+4. Inicializar Terraform
+
+    ```bash
+    terraform init
+    ```
+
+    Esto descargará los plugins necesarios.
+
+5. Planificar y aplicar la infraestructura
+
+    ```bash
+    terraform plan
+    terraform apply
+    ```
+
+    * **`terraform plan`** mostrará un resumen de los cambios que se van a realizar en la infraestructura. Si todo es correcto, puedes aplicar los cambios con terraform apply.
+    * ** **`terraform apply`** aplicará los cambios a la infraestructura. Terraform te pedirá confirmación antes de realizar cualquier cambio y creará un archivo de estado (`.tfstate`) para mantener un registro de los recursos creados.
+
+    !!! info Archivo `.tfstate`"
+        `.tfstate` es un archivo que Terraform utiliza para mantener un registro del estado actual de la infraestructura que ha creado. Este archivo es crucial para que Terraform pueda gestionar los recursos de manera eficiente y detectar cambios en la infraestructura. El archivo `.tfstate` contiene información detallada sobre los recursos creados, incluyendo sus identificadores, atributos y relaciones. Es importante mantener este archivo seguro y respaldado, ya que perderlo o corromperlo puede causar problemas al gestionar la infraestructura con Terraform.
+
+6. (Opcional) Refrescar el estado sin aplicar cambios
+
+    ```bash
+    terraform refresh
+    ```
+
+    Esto actualizará el `.tfstate` con el estado actual de AWS, sin modificar la infraestructura.
+
+7. (Opcional) Destruir todo
+
+    ```bash
+    terraform destroy
+    ```
+
+## Practica 3: Crear una pila de Terraform en Azure
+
+Carpeta [sesion2/terraform-vn-mv/Readme.md](../../sesion2/terraform-vn-mv/Readme.md)
+
+## Practica 4: Ejemplo de SAM
+
+Carpeta [sesion2/sam-resizer/README.md](../../sesion2/sam-resizer/README.md)
 
