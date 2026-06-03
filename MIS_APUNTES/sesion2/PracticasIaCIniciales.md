@@ -63,6 +63,19 @@ Creamos un nuevo entrono llamado **`ServidorIaC`** que el profesor va a poder ge
 
     ![alt text](captura.png)
 
+8. Comprobamos que tenemos acceso a los servicios de AWS con el rol asignado ejecutando el siguiente comando:
+
+    ```bash
+    voclabs:~/environment/cursoiac (main) $ aws sts get-caller-identity
+    {
+        "UserId": "AROAS47IYKXW6XBLVXWHT:i-03c5690a204a184??",
+        "Account": "1996672424??",
+        "Arn": "arn:aws:sts::199667242477:assumed-role/LabRole/i-03c5690a204a184??"
+    }
+    ```
+
+    Esto indica que estamos autenticados con el rol de IAM **LabRole** y que tenemos acceso a los servicios de AWS.
+
 ## Practica 1: Crear una pila de CloudFormation
 
 Carpeta [sesion2/cloudformation/ReADME.md](../../sesion2/cloudformation/README.md)
