@@ -1016,9 +1016,6 @@ El output puede ser usado por otros módulos o herramientas externas para refere
 
 📘[Outputs en Azure](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group)
 
-
-
-
 ---
 
 <img src="img/terraform_logo.svg" class="logo" />

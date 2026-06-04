@@ -5,7 +5,7 @@ En esta práctica construiremos desde cero una infraestructura en AWS usando Ter
 ![Arquitectura final](./imagenes/infraestructura_final.jpg)
 
 > [!NOTE]
->  **Recuerda que estamos en AWS Academy Learner Lab:** En este entorno de laboratorio existen algunas **restricciones** importantes: no se permite crear nuevos roles IAM (usaremos **LabRole**), y *no* se pueden utilizar servicios como **CloudFront** ni **Route 53**. En algún apartado extra propondremos trasladar el proyectoa otros laboratorios y usar alguna cuenta externa con usuario limitado. Supondremos también que tienes el Terraform configurado en tu equipo o entorno Cloud9 (preferible)
+> **Recuerda que estamos en AWS Academy Learner Lab:** En este entorno de laboratorio existen algunas **restricciones** importantes: no se permite crear nuevos roles IAM (usaremos **LabRole**), y *no* se pueden utilizar servicios como **CloudFront** ni **Route 53**. En algún apartado extra propondremos trasladar el proyectoa otros laboratorios y usar alguna cuenta externa con usuario limitado. Supondremos también que tienes el Terraform configurado en tu equipo o entorno Cloud9 (preferible)
 
 ## 1. Comprobar la estructura del proyecto
 
