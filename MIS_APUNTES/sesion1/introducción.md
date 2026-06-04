@@ -1,5 +1,7 @@
 # Introducción
 
+[TOC]
+
 ## Laboratorio de AWS
 
 Al acabar las 4h el laboratorio se apaga pero la infraestructura se apaga pero no se destruye, por lo que si quieres volver a acceder a la infraestructura después de que el laboratorio se haya apagado, puedes volver a encenderlo desde la pestaña "My Lab" y luego pulsar en "Start Lab".

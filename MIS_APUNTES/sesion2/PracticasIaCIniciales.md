@@ -1,5 +1,7 @@
 # Prácticas IaC Iniciales en AWS y Azure
 
+[TOC]
+
 ## Infraestructura como Código (IaC)
 
 En esta práctica de laboratorio, utilizaremos la Infraestructura como Código (IaC) para crear y gestionar recursos en AWS. IaC nos permite definir y provisionar infraestructura utilizando archivos de configuración, lo que facilita la automatización y la repetibilidad de nuestras implementaciones.
