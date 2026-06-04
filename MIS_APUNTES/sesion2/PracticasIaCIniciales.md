@@ -70,9 +70,9 @@ Creamos un nuevo entrono llamado **`ServidorIaC`** que el profesor va a poder ge
     ```bash
     voclabs:~/environment/cursoiac (main) $ aws sts get-caller-identity
     {
-        "UserId": "AROAS47IYKXW6XBLVXWHT:i-03c5690a204a184??",
-        "Account": "1996672424??",
-        "Arn": "arn:aws:sts::199667242477:assumed-role/LabRole/i-03c5690a204a184??"
+        "UserId": "...",
+        "Account": "...",
+        "Arn": "arn:aws:sts::...:assumed-role/LabRole/..."
     }
     ```
 

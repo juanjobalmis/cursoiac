@@ -18,11 +18,9 @@ En "AWS CLI" se encuentran las credenciales para acceder a AWS a través de la l
 
 ``` txt
 [default]
-aws_access_key_id=ASIAS47IYKXW7NUIB6RE
-
-aws_secret_access_key=2iLOMH7AuAit45XUE/92d0OXoDLthnb30+G3eah3
-
-aws_session_token=IQoJb3JpZ2luX2VjED8aCXVzLXdlc3QtMiJHMEUCIAhUwqAXJQvzqdQqIXzizvnsE+2s9D2BcxcuKEB6Tm5dAiEAo1WTrZx+CMNCr/JrekZ8FCAvmwTlnEVUcf9lZpEb2csqtQIICBABGgwxOTk2NjcyNDI0NzciDISSjWknJcDiCpwFqCqSAm40tTKsKVdiZYZqjZRODb61xn2jY9kO98i6yg3qOINfPVHVkzItBUcNuRACS9DtgWx82i2/2CDbELRiImz9XoTB2pGEl3n0K+ic2nqEc/UZOvatYxKDwfjMJbKywHslgXmOIQ15RaynTsRP1TsT5qJN5DHqtBRFie6fck5WUSoHP6kpDaJey56fNKokC4jQCqtE2uoW4W+yLVXBQJqOvV/M0UxXUDSnT+0OFzACO1zJhwesNzb7N7akhjSCVJFiTfnFYNJS2nujaXyjsCYiEVAJUebelI0siddR/RyYp6X6Lo1fAFsJGHYZW3dR9HTCOXo/UNkhR7zuyXOj7MEL3S4T2sNMEl3Jx926mzMHDVyQXAIwtMv00AY6nQFN5HikYI4h2RGsCAT0l6pMtP06ltCfMVmaEczsFc3U12KRKGB6qMCavSJi8OzgAhX0G3COSe1uTl6mA/A31MZBgjzVVcxbmSAumWBnr6MiekhFszMhmJmrr/+6r2BnKBV4UGzIynhVUlgss2+qGjaUmDCenBNsOBvNRXcANtqYDql9bp7DmS+xEnfCMHvp751KY661pJHgk0XZBCug
+aws_access_key_id=...
+aws_secret_access_key=...
+aws_session_token=...
 ```
 
 Para que AWS CLI pueda usar estas credenciales, es necesario configurar la AWS CLI con el comando `aws configure` y luego pegar las credenciales correspondientes en cada campo. Esto permitirá que la AWS CLI utilice estas credenciales para autenticar las solicitudes a los servicios de AWS durante el laboratorio.
