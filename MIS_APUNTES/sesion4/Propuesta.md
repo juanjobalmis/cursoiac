@@ -187,3 +187,23 @@ Tendré dos opciones:
 ## Qué es Cluod Front y cómo se relaciona con el balanceador de carga ALB
 
 **CloudFront** es un servicio de red de entrega de contenido (CDN) de AWS que se utiliza para distribuir contenido a los usuarios finales con baja latencia y alta velocidad de transferencia. CloudFront se integra con otros servicios de AWS, como S3, EC2, ALB, entre otros, para entregar contenido de manera eficiente. En el contexto de un balanceador de carga ALB, CloudFront puede actuar como una capa adicional de distribución de contenido, permitiendo que el tráfico se dirija al ALB desde ubicaciones geográficamente dispersas, mejorando así la experiencia del usuario al reducir la latencia y aumentar la velocidad de entrega del contenido. Además, CloudFront ofrece características de seguridad adicionales, como protección contra ataques DDoS, lo que puede ayudar a proteger el ALB y los recursos detrás de él.
+
+
+Los 2 pasos manuales que tendrás que hacer en Strato
+Para que todo el ecosistema funcione de principio a fin, tendrás que entrar al panel de control de Strato y hacer lo siguiente:
+
+1. Validar el certificado SSL/TLS de AWS
+
+Una vez que Terraform termine, ve a la consola web de AWS, busca Certificate Manager (ACM) y entra en el certificado de tu dominio.
+
+AWS te mostrará un Nombre de CNAME y un Valor de CNAME (algo como _xxyyzz.midemo.com apuntando a _aabbcc.acm-validations.aws).
+
+Tienes que ir a la gestión de DNS de Strato y crear ese registro CNAME exacto. AWS lo detectará pasados unos minutos y cambiará el estado del certificado a Issued (Emitido).
+
+2. Apuntar tu dominio de Strato al ALB de AWS
+
+Terraform te devolverá en la terminal un output llamado alb_url (por ejemplo: tfaws-alb-123456.us-east-1.elb.amazonaws.com).
+
+Tienes que ir a Strato y crear otro registro CNAME para que tu dominio (ej. www.midemo.com o app.midemo.com) apunte a esa URL larguísima del ALB.
+
+![alt text](image.png)
