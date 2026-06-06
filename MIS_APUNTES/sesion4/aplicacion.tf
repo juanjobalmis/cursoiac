@@ -88,6 +88,12 @@ resource "aws_acm_certificate" "alb_cert" {
   tags = { Name = "${var.project_name}-cert" }
 }
 
+# Nota: Como estás validando el DNS de forma manual en tu proveedor,
+# este recurso se quedará "esperando" en la terminal hasta que crees el CNAME.
+resource "aws_acm_certificate_validation" "cert_validation" {
+  certificate_arn = aws_acm_certificate.alb_cert.arn
+}
+
 # Definimos el recurso de validación DNS para ACM
 resource "aws_lb" "app_lb" {
   name                       = "${var.project_name}-alb"
@@ -138,12 +144,17 @@ resource "aws_lb_listener" "alb_listener_https" {
   port              = 443
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-2016-08"
+  
+  # Seguimos usando el ARN del certificado...
   certificate_arn   = aws_acm_certificate.alb_cert.arn
 
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.web_tg.arn
   }
+
+  # ¡CLAVE!: Obligamos al Listener a esperar a que la validación termine con éxito
+  depends_on = [aws_acm_certificate_validation.cert_validation]
 }
 
 # --- 5. EC2 e Inicialización ---

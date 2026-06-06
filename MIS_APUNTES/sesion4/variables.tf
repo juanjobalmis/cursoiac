@@ -50,7 +50,6 @@ variable "db_user" {
 variable "db_pass" {
   description = "Contraseña de la base de datos"
   type        = string
-  sensitive   = true
 }
 
 variable "tomcat_user" {
@@ -61,13 +60,11 @@ variable "tomcat_user" {
 variable "tomcat_pass" {
   description = "Contraseña admin de Tomcat"
   type        = string
-  sensitive   = true
 }
 
 variable "hmacSHA256_token" {
   description = "Token HMAC-SHA256 de 32 caracteres para firma de tokens de la aplicación"
   type        = string
-  sensitive   = true
 }
 
 # --- Variables para Certificado y Reglas ---
