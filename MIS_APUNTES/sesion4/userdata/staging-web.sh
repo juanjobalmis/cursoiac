@@ -21,8 +21,10 @@ mkdir -p /usr/local/corretto-25
 tar -xzf /tmp/amazon-corretto-25-x64-linux-jdk.tar.gz -C /usr/local/corretto-25 --strip-components=1
 
 export JAVA_HOME=/usr/local/corretto-25
+export JRE_HOME=/usr/local/corretto-25
 export PATH=$JAVA_HOME/bin:$PATH
 echo "export JAVA_HOME=/usr/local/corretto-25" >> /etc/profile.d/java.sh
+echo "export JRE_HOME=/usr/local/corretto-25" >> /etc/profile.d/java.sh
 echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> /etc/profile.d/java.sh
 
 # 4. Instalación de Tomcat 11
@@ -79,6 +81,7 @@ Group=tomcat
 
 # Configuración de Rutas y PID
 Environment="JAVA_HOME=/usr/local/corretto-25"
+Environment="JRE_HOME=/usr/local/corretto-25"
 Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
 Environment="CATALINA_HOME=/opt/tomcat"
 Environment="CATALINA_BASE=/opt/tomcat"

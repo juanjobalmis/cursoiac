@@ -1,4 +1,4 @@
-Debes crear un archivo terraform.tfvars con el siguiente contenido:
+Debes crear un archivo **terraform.tfvars** con el siguiente contenido:
 
 ```hcl
 # terraform.tfvars
