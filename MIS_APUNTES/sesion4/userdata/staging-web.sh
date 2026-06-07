@@ -44,7 +44,7 @@ DB_USER=$(echo $SECRET_VAL | jq -r .db_user)
 DB_PASS=$(echo $SECRET_VAL | jq -r .db_pass)
 TOMCAT_USER=$(echo $SECRET_VAL | jq -r .tomcat_user)
 TOMCAT_PASS=$(echo $SECRET_VAL | jq -r .tomcat_pass)
-HMACSHA256_TOKEN=$(echo $SECRET_VAL | jq -r .hmacSHA256_token)
+HMAC_SHA_KEY=$(echo $SECRET_VAL | jq -r .hmac_sha_key)
 
 # 6. Configurar usuarios en Tomcat (usando el secreto recuperado)
 cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
@@ -78,7 +78,7 @@ Environment="JAVA_HOME=/usr/local/corretto-25"
 Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
 Environment="CATALINA_HOME=/opt/tomcat"
 Environment="CATALINA_BASE=/opt/tomcat"
-Environment="HMACSHA256_TOKEN=$HMACSHA256_TOKEN"
+Environment="HMAC_SHA_KEY=$HMAC_SHA_KEY"
 Environment="DB_HOST=${db_host}"
 Environment="DB_USER=$DB_USER"
 Environment="DB_PASS=$DB_PASS"

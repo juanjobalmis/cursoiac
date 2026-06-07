@@ -22,7 +22,7 @@ resource "aws_efs_mount_target" "efs_mount" {
 # --- 2. Secrets Manager ---
 # NUEVO: Creamos un secreto en AWS Secrets Manager para almacenar de forma segura las credenciales de la base de datos y Tomcat.
 resource "aws_secretsmanager_secret" "app_secrets" {
-  name        = "${var.project_name}-app-credentials"
+  name        = "${var.project_name}-app-credenciales"
   description = "Credenciales para RDS y Tomcat"
 }
 
@@ -33,7 +33,7 @@ resource "aws_secretsmanager_secret_version" "app_secrets_val" {
     db_pass          = var.db_pass
     tomcat_user      = var.tomcat_user
     tomcat_pass      = var.tomcat_pass
-    hmacSHA256_token = var.hmacSHA256_token
+    hmac_sha_key = var.hmac_sha_key
   })
 }
 

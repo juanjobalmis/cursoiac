@@ -62,7 +62,7 @@ variable "tomcat_pass" {
   type        = string
 }
 
-variable "hmacSHA256_token" {
+variable "hmac_sha_key" {
   description = "Token HMAC-SHA256 de 32 caracteres para firma de tokens de la aplicación"
   type        = string
 }
