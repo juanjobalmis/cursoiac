@@ -57,12 +57,14 @@ cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
 </tomcat-users>
 EOF
 
-# Permitir acceso al Manager de Tomcat desde cualquier IP
-sed -i '/<Valve className="org.apache.catalina.valves.RemoteAddrValve"/,/allow="127\\.\\d+\\.\\d+\\.\\d+|::1|0:0:0:0:0:0:0:1" \\/>/d' /opt/tomcat/webapps/manager/META-INF/context.xml
+# Permitir acceso al Manager de Tomcat desde cualquier IP (Adaptado a Tomcat 11)
+sed -i '/<Valve className="org.apache.catalina.valves.RemoteCIDRValve"/,/allow="127\.0\.0\.0\/8,::1\/128" \/>/d' /opt/tomcat/webapps/manager/META-INF/context.xml
 
 # Otorgar permisos de la carpeta y EFS al usuario tomcat
 chown -R tomcat:tomcat /opt/tomcat/
 chmod -R u+x /opt/tomcat/bin
+chmod -R 640 /opt/tomcat/conf/*
+chmod 750 /opt/tomcat/conf/
 
 # 7. Servicio Systemd para Tomcat
 cat <<EOF > /etc/systemd/system/tomcat.service
@@ -74,16 +76,26 @@ After=network.target
 Type=forking
 User=tomcat
 Group=tomcat
+
+# Configuración de Rutas y PID
 Environment="JAVA_HOME=/usr/local/corretto-25"
 Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
 Environment="CATALINA_HOME=/opt/tomcat"
 Environment="CATALINA_BASE=/opt/tomcat"
+PIDFile=/opt/tomcat/temp/tomcat.pid
+
+# Variables de entorno para la aplicación web
 Environment="HMAC_SHA_KEY=$HMAC_SHA_KEY"
 Environment="DB_HOST=${db_host}"
 Environment="DB_USER=$DB_USER"
 Environment="DB_PASS=$DB_PASS"
+
+# Ejecución
 ExecStart=/opt/tomcat/bin/startup.sh
 ExecStop=/opt/tomcat/bin/shutdown.sh
+
+# Evitar que systemd marque el servicio como "fallido" al detener Java
+SuccessExitStatus=143
 
 [Install]
 WantedBy=multi-user.target
