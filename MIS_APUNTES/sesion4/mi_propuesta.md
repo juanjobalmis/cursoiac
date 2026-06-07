@@ -7,6 +7,8 @@
 !!! Note Nota
     En la instancia de **Cloud9** creada en el laboratorio se ha clonado un repositorio público propio en **`/cursoiac`** es una copia del repositorio del curso en donde en la carpeta **`/cursoiac/MIS_APUNTES`** se han ido tomando notas de las diferentes sesiones. En **`/cursoiac/MIS_APUNTES/sesion4`** se encuentra el código de Terraform modificado para esta propuesta, así como el script de User Data actualizado para instalar Tomcat 11 y Java Corretto 25 en lugar de Wordpress que se han adjuntado junto a esta entrega.
 
+    **El repositorio tiene seteadas unas credenciales de GitHUb hasta Agosto por lo que cualquier commit y push se subirán correctamente al repositorio público de GitHub y se podrán revisar los cambios realizados en el código**.
+
 1. Quitar Wordpress y poner Tomcat 11 con Java 25 en su lugar.
 2. Añadir un cetificado SSL/TSL de AWS ACM para servir la aplicación de forma segura bajo HTTPS a la url **https://aws.juanjoguhu.net** (o el dominio que configures en domain_name).
 3. Usar AWS Secrets Manager para almacenar de forma segura las credenciales de la base de datos RDS, del administrador de Tomcat y el token de firma hmacSHA256. El script de User Data de las instancias EC2 leerá estas credenciales en caliente al arrancar, evitando hardcodear información sensible.
@@ -400,8 +402,30 @@ Hago unas modificaciones en el script de instalación y refresco las instancias 
 
 ```bash
 voclabs:~/../MIS_APUNTES/sesion4 (main) $ terraform apply -replace="aws_autoscaling_group.web_asg"
+
+...
+aws_autoscaling_group.web_asg: Still destroying... [id=tfaws-asg-20260607095233465600000002, 06m10s elapsed]
+aws_autoscaling_group.web_asg: Still destroying... [id=tfaws-asg-20260607095233465600000002, 06m20s elapsed]
+aws_autoscaling_group.web_asg: Destruction complete after 6m21s
+aws_launch_template.web_lt: Modifying... [id=lt-08dcb1bac8e88fe56]
+aws_launch_template.web_lt: Modifications complete after 5s [id=lt-08dcb1bac8e88fe56]
+aws_autoscaling_group.web_asg: Creating...
+aws_autoscaling_group.web_asg: Still creating... [00m10s elapsed]
+aws_autoscaling_group.web_asg: Creation complete after 14s [id=tfaws-asg-20260607110757506000000002]
+
+Apply complete! Resources: 1 added, 1 changed, 1 destroyed.
+
+Outputs:
+
+alb_url = "https://tfaws-alb-1772361217.us-east-1.elb.amazonaws.com"
+rds_endpoint = "tfaws-db.clt5kjwj6ikt.us-east-1.rds.amazonaws.com"
+secret_db_credentials = <sensitive>
+secret_tomcat_credentials = <sensitive>
+voclabs:~/.../MIS_APUNTES/sesion4 (main) $ 
 ```
 
-Tras reiniciarse persiste el error 502 Bad Gateway.
+**Tras reiniciarse persiste el error 502 Bad Gateway porque sigue sin reiniciarse Tomcat**
 
-Hasta aquí mi propuesta de arquitectura y despliegue. 
+No encuentro ningún error claro en los logs de Tomcat, pero el servicio sigue sin arrancar correctamente.
+
+Hasta aquí mi propuesta de arquitactura y despliegue.
