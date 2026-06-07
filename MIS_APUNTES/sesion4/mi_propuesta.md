@@ -3,6 +3,10 @@
 
 El código despliega una arquitectura web de alta disponibilidad, segura y tolerante a fallos en AWS para albergar una aplicación Apache Tomcat 11 corriendo sobre Java 25 (Early Access), conectada a una base de datos administrada y con almacenamiento compartido.
 
+## Esquema de la arquitectura modificada
+
+![alt text](image.png)
+
 ## Componentes de Red (`red.tf`, `variables.tf`)
 
 * **VPC personalizada**: Creación de una red virtual aislada con el bloque CIDR 10.0.0.0/16.  
@@ -112,6 +116,3 @@ Dado que en el código de Terraform has configurado un dominio personalizado (do
     * Crea un registro de tipo CNAME para tu subdominio (por ejemplo, aws si deseas mapear aws.juanjoguhu.net) apuntando directamente a la URL larga del ALB que acabas de copiar.  
     * Una vez propagados los cambios de DNS, cualquier petición que entre por HTTP (puerto 80) al dominio será redirigida por el listener del ALB de forma segura mediante un código 301 hacia HTTPS (puerto 443) , sirviendo tu aplicación web Tomcat bajo una conexión cifrada y segura.  
 
-## Esquema de la arquitectura desplegada
-
-![alt text](image.png)

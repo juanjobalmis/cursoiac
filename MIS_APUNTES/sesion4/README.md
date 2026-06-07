@@ -1,7 +1,7 @@
-Debes crear un archivo variables.tfvars con el siguiente contenido:
+Debes crear un archivo terraform.tfvars con el siguiente contenido:
 
 ```hcl
-# variables.tfvars
+# terraform.tfvars
 # Credenciales para RDS y Tomcat que se enviarán a Secrets Manager
 
 db_user     = "admin"

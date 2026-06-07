@@ -1,33 +1,40 @@
 #!/bin/bash
+set -e
+
 # 1. Instalar utilidades requeridas
 yum update -y
 yum install -y jq amazon-efs-utils tar wget aws-cli
 
 # 2. Configurar la estructura de EFS para uploads compartidos
 mkdir -p /opt/tomcat/webapps/ROOT/uploads
+
 # Montar EFS
 mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2,noresvport ${efs_id}.efs.${region}.amazonaws.com:/ /opt/tomcat/webapps/ROOT/uploads
+
 # Persistencia en fstab
 echo '${efs_id}.efs.${region}.amazonaws.com:/ /opt/tomcat/webapps/ROOT/uploads efs defaults,_netdev 0 0' >> /etc/fstab
 
-# 3. Instalación de Java 25 (Usando EA OpenJDK para Linux x64)
-wget https://download.java.net/java/early_access/jdk25/1/GPL/openjdk-25-ea+1_linux-x64_bin.tar.gz -P /tmp/
-tar -xvf /tmp/openjdk-25-ea+1_linux-x64_bin.tar.gz -C /usr/local/
-export JAVA_HOME=/usr/local/jdk-25
+# 3. Instalación de Java 25 (Amazon Corretto 25)
+# Descargamos el empaquetado oficial de Corretto 25
+wget https://corretto.aws/downloads/latest/amazon-corretto-25-x64-linux-jdk.tar.gz -P /tmp/
+mkdir -p /usr/local/corretto-25
+tar -xzf /tmp/amazon-corretto-25-x64-linux-jdk.tar.gz -C /usr/local/corretto-25 --strip-components=1
+
+export JAVA_HOME=/usr/local/corretto-25
 export PATH=$JAVA_HOME/bin:$PATH
-echo "export JAVA_HOME=/usr/local/jdk-25" >> /etc/profile.d/java.sh
+echo "export JAVA_HOME=/usr/local/corretto-25" >> /etc/profile.d/java.sh
 echo "export PATH=\$JAVA_HOME/bin:\$PATH" >> /etc/profile.d/java.sh
 
 # 4. Instalación de Tomcat 11
 useradd -m -U -d /opt/tomcat -s /bin/false tomcat
-wget https://downloads.apache.org/tomcat/tomcat-11/v11.0.0-M24/bin/apache-tomcat-11.0.0-M24.tar.gz -P /tmp/
-tar -xzf /tmp/apache-tomcat-11.0.0-M24.tar.gz -C /opt/tomcat --strip-components=1
+wget https://downloads.apache.org/tomcat/tomcat-11/v11.0.22/bin/apache-tomcat-11.0.22.tar.gz -P /tmp/
+tar -xzf /tmp/apache-tomcat-11.0.22.tar.gz -C /opt/tomcat --strip-components=1
 
 # Ajustar puerto Tomcat 8080 -> 80
 sed -i 's/port="8080"/port="80"/g' /opt/tomcat/conf/server.xml
 
 # Otorgar permisos al binario de Java para abrir puertos privilegiados (< 1024)
-setcap cap_net_bind_service=+ep /usr/local/jdk-25/bin/java
+setcap cap_net_bind_service=+ep /usr/local/corretto-25/bin/java
 
 # 5. Recuperar Secretos de AWS Secrets Manager
 SECRET_VAL=$(aws secretsmanager get-secret-value --secret-id ${secret_arn} --region ${region} --query SecretString --output text)
@@ -50,7 +57,7 @@ cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
 </tomcat-users>
 EOF
 
-# Permitir acceso al Manager de Tomcat desde cualquier IP (descomentar la restricción local)
+# Permitir acceso al Manager de Tomcat desde cualquier IP
 sed -i '/<Valve className="org.apache.catalina.valves.RemoteAddrValve"/,/allow="127\\.\\d+\\.\\d+\\.\\d+|::1|0:0:0:0:0:0:0:1" \\/>/d' /opt/tomcat/webapps/manager/META-INF/context.xml
 
 # Otorgar permisos de la carpeta y EFS al usuario tomcat
@@ -67,11 +74,14 @@ After=network.target
 Type=forking
 User=tomcat
 Group=tomcat
-Environment="JAVA_HOME=/usr/local/jdk-25"
+Environment="JAVA_HOME=/usr/local/corretto-25"
 Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
 Environment="CATALINA_HOME=/opt/tomcat"
 Environment="CATALINA_BASE=/opt/tomcat"
 Environment="HMACSHA256_TOKEN=$HMACSHA256_TOKEN"
+Environment="DB_HOST=${db_host}"
+Environment="DB_USER=$DB_USER"
+Environment="DB_PASS=$DB_PASS"
 ExecStart=/opt/tomcat/bin/startup.sh
 ExecStop=/opt/tomcat/bin/shutdown.sh
 

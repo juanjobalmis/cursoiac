@@ -208,4 +208,9 @@ resource "aws_autoscaling_group" "web_asg" {
     value               = "${var.project_name}-tomcat"
     propagate_at_launch = true
   }
+
+  # IMPORTANTE: El ASG debe esperar a que el EFS esté listo y 
+  # montado antes de lanzar las instancias, para evitar errores en el 
+  # arranque de Tomcat y condiciones de carrera. Por eso usamos depends_on aquí.
+  depends_on = [aws_efs_mount_target.efs_mount]
 }
