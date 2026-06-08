@@ -302,11 +302,11 @@ Los pseudoparámetros proporcionan contexto del entorno muy útil dentro de las 
 ## Funciones intrínsecas 
 CloudFormation ofrece una serie de [**funciones intrínsecas**](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference.html) (built-in) para calcular valores dinámicamente dentro de la plantilla. Estas funciones nos permiten, por ejemplo, referenciar recursos y parámetros, hacer cálculos simples, concatenar strings, condicionar la creación de recursos, todo ello durante el *runtime*. Se usan con la sintaxis `Fn::<Nombre>` (en YAML existen abreviaturas con `!`). Algunas de las más comunes son:  
 
-- **Ref** / **Fn::GetAtt** – Provienen de otras partes de la plantilla: `Ref` es el valor de un parámetro o el ID lógico de un recurso, `Fn::GetAtt` obtiene un **atributo** de un recurso (p. ej. URL de bucket S3, ARN de Lambda...)  
-- **Fn::Join** / **Fn::Sub** – Manipulan cadenas de texto. `Fn::Join` concatena una lista de subcadenas con un separador dado, mientras que `Fn::Sub` permite insertar valores (parámetros, atributos, pseudoparámetros) dentro de una cadena usando placeholders `${}` de forma muy cómoda.  
-- **Funciones condicionales** – Como **Fn::If**, **Fn::Equals**, **Fn::And**, **Fn::Or**, **Fn::Not**. Sirven para introducir lógica condicional en la plantilla, por ejemplo crear o no un recurso dependiendo de un valor, o asignar distintos valores a propiedades según una condición booleana.  
+- **Ref** / **Fn::GetAtt** – Provienen de otras partes de la plantilla: `Ref` es el valor de un parámetro o el ID lógico de un recurso, `Fn::GetAtt` obtiene un **atributo** de un recurso (p. ej. URL de bucket S3, ARN de Lambda...)
+- **Fn::Join** / **Fn::Sub** – Manipulan cadenas de texto. `Fn::Join` concatena una lista de subcadenas con un separador dado, mientras que `Fn::Sub` permite insertar valores (parámetros, atributos, pseudoparámetros) dentro de una cadena usando placeholders `${}` de forma muy cómoda.
+- **Funciones condicionales** – Como **Fn::If**, **Fn::Equals**, **Fn::And**, **Fn::Or**, **Fn::Not**. Sirven para introducir lógica condicional en la plantilla, por ejemplo crear o no un recurso dependiendo de un valor, o asignar distintos valores a propiedades según una condición booleana.
 - **Fn::FindInMap** – Busca un valor dentro de las **Mappings** según claves dadas (ej. dado un mapping de AMIs por región, recuperar la AMI correspondiente a la región actual).  
-- **Fn::ImportValue** – Importa el valor de salida (**Output**) exportado desde otra pila (para recursos entre stacks).  
+- **Fn::ImportValue** – Importa el valor de salida (**Output**) exportado desde otra pila (para recursos entre stacks).
 
 ---
 
@@ -353,7 +353,7 @@ En resumen es útil para obtener detalles de recursosy usarlos en *outputs* u ot
 ## Outputs (salidas) 
 La sección **Outputs** permite exponer información útil de la pila una vez creada. Podemos pensar en los outputs como “**resultados**” que CloudFormation nos devuelve: por ejemplo, la URL pública de un sitio web, el endpoint de una base de datos, el ID de un VPC creado, etc. Estas salidas aparecen en la consola de CloudFormation al finalizar el despliegue y también se pueden obtener por CLI/API. 
 
-Los outputs sirven para **encadenar** stacks o simplemente para facilitar operaciones manuales. Se pueden marcar outputs para **exportación**, asignándoles un nombre global. Esto permite que otras pilas las **importen datos (usando `Fn::ImportValue`), facilitando el intercambio de información entre stacks. 
+Los outputs sirven para **encadenar** stacks o simplemente para facilitar operaciones manuales. Se pueden marcar outputs para **exportación**, asignándoles un nombre global. Esto permite que otras pilas las **importen** (usando `Fn::ImportValue`), facilitando el intercambio de información entre stacks.
 
 En resumen, **los outputs dan visibilidad de los recursos creados**. En una plantilla bien diseñada, deberíamos exponer los datos que los administradores o otras plantillas necesitarán, en lugar de obligar a buscarlos en la consola. 
 
@@ -508,7 +508,7 @@ Por ejemplo, ciertas configuraciones de red requieren secuencia explícita: un *
 
 **Casos comunes de uso**: recursos que deben ser eliminados en orden específico (DependsOn garantiza que en la eliminación, hará el inverso), o inicializaciones donde un recurso necesita que otro esté 100% operativo primero. 
 
-En general, es buena práctica confiar en las dependencias implícitas siempre que sea posible (ref vs ref), pero **DependsOn** es nuestra herramienta para las excepciones. Nos da control manual del grafo de creación cuando la inferencia automática no basta o no existe.  
+En general, es buena práctica confiar en las dependencias implícitas siempre que sea posible, pero **DependsOn** puede ser necesario en ciertos casos. Nos da control manual del grafo de creación cuando la inferencia automática no basta o no existe.
 ---
 
 ## Ejemplo – Uso de DependsOn 
@@ -569,18 +569,18 @@ Esto obligaría a que el valor sea exactamente uno de esos tres. Estas restricci
 ## Diseño de plantillas – buenas prácticas (I)
 Más allá de la sintaxis, se suelen recomendar algunas [**buenas prácticas**](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/best-practices.html): 
 
-- **Documentación**: Aprovecha el campo **Description** de la plantilla para describir su propósito. Usa nombres lógicos claros para recursos y parámetros. Puedes incluir **Metadata** adicional o comentarios YAML para explicar secciones complejas. Esto ayuda a otros (y a tu yo futuro) a entender la template.  
+- **Documentación**: Aprovecha el campo **Description** de la plantilla para describir su propósito. Usa nombres lógicos claros para recursos y parámetros. Puedes incluir **Metadata** adicional o comentarios YAML para explicar secciones complejas. Esto ayuda a otros (y a tu yo futuro) a entender la template.
 
-- **Modularidad**: Divide infraestructuras grandes en plantillas más pequeñas por dominios o capas (red, base de datos, frontend, etc.). Puedes utilizar *nested stacks* (luego los veremos) o *exports/Imports* para conectarlas, evitando una mega plantilla monolítica difícil de mantener.  
+- **Modularidad**: Divide infraestructuras grandes en plantillas más pequeñas por dominios o capas (red, base de datos, frontend, etc.). Puedes utilizar *nested stacks* (luego los veremos) o *exports/Imports* para conectarlas, evitando una mega plantilla monolítica difícil de mantener.
 
-- **Reutilización**: Escribe plantillas genéricas usando parámetros en lugar de valores fijos. Emplea *Mappings* para casos especiales por región o entorno. La idea es no duplicar lógica en múltiples templates, sino una plantilla adaptable. Si te ves copiando-pegalando recursos entre plantillas, piensa en factorizar esa parte común.  
+- **Reutilización**: Escribe plantillas genéricas usando parámetros en lugar de valores fijos. Emplea *Mappings* para casos especiales por región o entorno. La idea es no duplicar lógica en múltiples templates, sino una plantilla adaptable. Si te ves copiando y pegando recursos entre plantillas, piensa en factorizar esa parte común.
 
-- **Evitar valores sensibles en texto plano**: No hardcodees secretos (passwords, claves) en las templates. Usa *Parameters* de tipos integrados como *SecureString*, *AWS Secrets Manager* o *SSM Parameter Store* y referencias a ellos, para obtener credenciales de forma segura.  
+- **Evitar valores sensibles en texto plano**: No incluyas secretos (passwords, claves) en las templates. Usa *Parameters* de tipos integrados como *SecureString*, *AWS Secrets Manager* o *SSM Parameter Store* y referencias a ellos, para obtener credenciales de forma segura.
 
 ---
 
 ## Diseño de plantillas – buenas prácticas (y II)
-- **Pruebas y validación continua**: Versiona tus plantillas (Git) y pruébalas en entornos de prueba antes de producción. Utiliza herramientas como **CloudFormation-lint** (linting estático) y **taskcat** (despliegue de prueba en múltiples regiones) para detectar problemas pronto. Integrar estas pruebas en tu pipeline CI/CD te ahorrará sorpresas.  
+- **Pruebas y validación continua**: Versiona tus plantillas (Git) y pruébalas en entornos de prueba antes de producción. Utiliza herramientas como **CloudFormation-lint** (linting estático) y [**taskcat**](https://aws-ia.github.io/taskcat/) (herramienta de testeo y despliegue de plantillas en múltiples regiones) para detectar problemas pronto. Integrar estas pruebas en tu pipeline CI/CD te ahorrará sorpresas.  
 
 - **Evitar drift**: Siempre que sea posible, realiza cambios de infraestructura a través de CloudFormation (ya sea actualizando la pila o usando Change Sets). No manualmente en la consola. Esto **mantiene la plantilla como fuente de verdad** y permite usar detección de desviaciones para verificar integridad. 
 
@@ -676,7 +676,7 @@ Hay que pensar en **la plantilla como el plano, la stack como el edificio** cons
 ## Ejemplo – Reutilización de una plantilla en dos stacks 
 Supongamos que tenemos una plantilla que crea un servidor web y queremos utilizarla para crear dos stacks: una  **Dev** y otra **Prod**, cada una con un tamaño de instancia especificado en parámetro: 
 
-- Desplegamos *WebServer.yml* con parámetro *InstanceType= t2.micro* y nombre de stack "MiApp-Dev". CloudFormation crea la pila **MiApp-Dev** con un EC2 pequeño, un security group, etc.  
+- Desplegamos *WebServer.yml* con parámetro *InstanceType= t2.micro* y nombre de stack "MiApp-Dev". CloudFormation crea la pila **MiApp-Dev** con un EC2 pequeño, un security group, etc.
 - Luego desplegamos la **misma plantilla** *WebServer.yml* con *InstanceType= t3.large* y stack name "MiApp-Prod". Obtendremos otra pila **MiApp-Prod** con un EC2 más grande. 
 
 Ambas stacks coexisten sin conflicto. Podemos gestionarlas separadamente: apagar la de Dev sin afectar Prod, actualizar Prod sin tocar Dev, etc. La plantilla actúa como un *modelo*, e **instanciar** el modelo en diferentes configuraciones nos da stacks múltiples. 
@@ -730,7 +730,7 @@ En definitiva, las nested stacks permiten *plantillas de plantillas*, componiend
 ## Stack Sets (Conjuntos de pilas) 
 Cuando necesitamos desplegar una misma infraestructura en **múltiples cuentas y/o regiones**, administrar las stacks una por una se vuelve impracticable. 
 
-Ahí entran los **StackSets**: esta característica de CloudFormation nos permite mantener una **plantilla única** asociada a un conjunto de cuentas y regiones, y orquestar despliegues y actualizaciones en esos entornos centralizadamente. 
+Ahí entran los **StackSets**: esta característica de CloudFormation nos permite mantener una **plantilla única** asociada a un conjunto de cuentas y regiones, y orquestar despliegues y actualizaciones en esos entornos de manera centralizada.
 
 <img class="full-height" src="img/stackset.jpg">
 
@@ -899,7 +899,7 @@ Podemos entonces ver un **informe detallado de desviación al estilo Git**: para
 ---
 
 ## Detección de desviaciones (*Drift*) 
-La detección de drift **no corrige** nada automáticamente, es informativa ya lo vimos, **al contrario de Terrafore que tiene mecanismos de reconcilación automática infraestructura-IaC**). Sirve para auditar: si encontramos desviaciones, podemos decidir alinearlas, ya sea aplicando una actualización de stack que restablezca los valores, o anotando la plantilla para incluir ese cambio permanentemente. 
+La detección de drift **no corrige** nada automáticamente, es informativa, **al contrario que Terraform, que tiene mecanismos de reconciliación automática**). Sirve para auditar: si encontramos desviaciones, podemos decidir alinearlas, ya sea aplicando una actualización de stack que restablezca los valores, o anotando la plantilla para incluir ese cambio permanentemente. 
 
 También puede servirnos para detectar incidentes de seguridad donde alguien hizo un cambio que debemos revertir manualmente. **Para establecer respuestas, mitigaciones o correcciones automáticas** se utilizarían otros frameworks interconectados específicos como *AWS Config* o *AWS Systems Manager*.
 
@@ -925,13 +925,13 @@ Hasta que no resolvamos, esa stack seguirá figurando como *drifted*.
 ## Ejemplo – Detectando drift en una stack (y II)
 Otro ejemplo: si alguien borró un bucket creado por la stack. El drift detection listará ese bucket como **DELETE** – CloudFormation informará que esperaba un recurso con tal nombre lógico pero ya no existe. En tal caso, la stack está en un estado inconsistente (CloudFormation cree que hay un recurso que no está). 
 
-**La acción sería recrearlo* (posiblemente con una actualización de stack), o eliminarlo de la plantilla y actualizar para “oficializar” la eliminación. 
+**La solución sería recrearlo** (posiblemente con una actualización de stack), o eliminarlo de la plantilla y actualizar para “oficializar” la eliminación. 
 
 En resumen, estos informes de drift nos dan **visibilidad post-deployment**. Podemos integrarlos en auditorías. 
 
-Por ejemplo, correr drift detection semanalmente y revisar que ninguna desviación crítica haya ocurrido. Si las hay, pasar el marrón al equipo correspondiente y que se involucren. 
+Por ejemplo, podríamos ejecutar la detección de drift semanalmente y revisar que ninguna desviación crítica haya ocurrido. Si las hay, notificar al equipo responsable para que lo solucione o implementar alguna automatización que corrija el error.
 
-De esta forma mantenemos la disciplina de IaC: cualquier cambio deseado debería codificarse en la plantilla, no hecho a mano en producción. CloudFormation nos "chiva" cuando eso no se cumple.  
+De esta forma mantenemos la disciplina de IaC: cualquier cambio deseado debería codificarse en la plantilla, no hecho a mano en producción. CloudFormation nos alerta cuando eso no se cumple.
 ---
 
 ## Reemplazo de recursos en infraestructura desplegada 
@@ -997,17 +997,17 @@ Con la debida planificación, **incluso cambios disruptivos pueden realizarse co
 # **Galería** de ejemplos de CloudFormation 
 AWS proporciona [**una galería oficial de plantillas de CloudFormation**](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-snippets.html) que sirven como ejemplos prácticos de múltiples arquitecturas y casos de uso. Estas plantillas de muestra abarcan desde configuraciones sencillas hasta despliegues completos de aplicaciones muy conocidas. Podemos usarlas directamente para desplegar esas soluciones o estudiarlas para aprender patrones de CloudFormation. Muchos de estos ejemplos ilustran buenas prácticas, integración de scripts de bootstrap, uso de parámetros y mappings, etc. 
 
-La galería incluye categorías como: aplicaciones web de código abierto (WordPress, Drupal, Joomla, etc.), ejemplos de *frameworks* (*LAMP stacks, Ruby on Rails Hello World...*), *template features* (demostraciones concretas de *Auto Scaling, VPCs, IAM*, etc.), plantillas de referencia de *whitepapers*, entre otras. Cada ejemplo suele venir con una breve descripción de lo que hace. 
+También tienes a tu disposición el sitio [AWS Solutions Library](https://aws.amazon.com/es/solutions/), con soluciones para diferentes sectores que suelen incluir ejemplos de implementación y plantillas de CloudFormation.
 
 A continuación, revisaremos algunos **ejemplos destacados de la galería oficial**: soluciones comunes o interesantes que ilustran el poder de CloudFormation en escenarios reales. Estos ejemplos van desde desplegar una simple aplicación en una instancia, hasta arquitecturas de alta disponibilidad con múltiples AZ, pasando por contenedores ECS y CDN global.  
 ---
 
 ## Ejemplo 1: WordPress en una instancia EC2 
-Uno de los ejemplos clásicos son **[pila LAMP o desplegar WordPress por enésima vez](https://aws.amazon.com/es/cloudformation/templates/aws-cloudformation-templates-us-west-2/)**, usando CloudFormation. La galería ofrece plantillas que instalan WordPress automáticamente en un servidor: por ejemplo, una plantilla que lanza una instancia EC2 Linux y en el mismo servidor instala Apache, PHP y MySQL (LAMP stack), u otra que además separa la capa de datos a RDS (*VPC_Wordpress_Single_Instance_With_RDS*. 
+Uno de los ejemplos clásicos son **[pila LAMP o desplegar WordPress por enésima vez](https://aws.amazon.com/es/cloudformation/templates/aws-cloudformation-templates-us-west-2/)**, usando CloudFormation. La galería ofrece plantillas que instalan WordPress automáticamente en un servidor: por ejemplo, una plantilla que lanza una instancia EC2 Linux y en el mismo servidor instala Apache, PHP y MySQL (LAMP stack), u otra que además separa la capa de datos a RDS (*VPC_Wordpress_Single_Instance_With_RDS*). 
 
 Estas plantillas aprovechan los **scripts de arranque** de CloudFormation. En particular, el ejemplo [*wordpress-via-cfn-bootstrap.template*](https://aws.amazon.com/es/cloudformation/templates/aws-cloudformation-templates-us-west-2/#:~:text=wordpress%2Dvia%2Dcfn%2Dbootstrap.template) utiliza **cfn-init** para descargar e instalar WordPress automáticamente durante el despliegue. Sólo hay que proporcionar parámetros como la contraseña de admin de WordPress, el tamaño de instancia, etc. Al lanzar la stack, en unos minutos sale un sitio WordPress funcional. 
 
-Se parece mucho a ejemplos vistos, demostrando que CloudFormation puede no solo crear la infraestructura (EC2, Security Group, RDS, etc) sino también configurar la aplicación en sí. Con pequeños (o grandes) cambios podríamos adaptarlo a otras aplicaciones LAMP que usemo.   
+Se parece mucho a ejemplos vistos, demostrando que CloudFormation puede no solo crear la infraestructura (EC2, Security Group, RDS, etc) sino también configurar la aplicación en sí. Con pequeños (o grandes) cambios podríamos adaptarlo a otras aplicaciones LAMP que usemos.
 ---
 
 ## Ejemplo 2: Arquitectura web **alta disponibilidad** (multi-AZ) 
@@ -1055,5 +1055,3 @@ La galería también cubre servicios de nivel superior. Un ejemplo interesante e
 Otra variante es [**CloudFront_MultiOrigin**](https://s3-us-west-2.amazonaws.com/cloudformation-templates-us-west-2/CloudFront_MultiOrigin.template), que muestra cómo CloudFront puede tener múltiples orígenes (por ejemplo, S3 para contenido estático y un ALB para contenido dinámico/API). CloudFormation permite describir todo eso: se definen las distribuciones, sus cache behaviors (p. ej., URL path patterns mapeados a distintos orígenes), y las configuraciones de error pages, logging, etc. 
 
 Estos ejemplos son importantes para introducirse en el **despliegue de aplicaciones modernas**, donde la mayor parte del tráfico de una aplicación son datos estáticos que deben cachearse cerca del cliente para dar una buena experiencia de usuario, mientras que las peticiones dinámicas van a balanceadores de carga, API Gateway, etc. Cloudfront sirve para hacer esa distinción, cachear y regular comportamientos y automatizar y sistematizar su despliegue es básico.
-
----
