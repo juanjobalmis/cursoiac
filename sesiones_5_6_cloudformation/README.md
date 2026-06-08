@@ -656,10 +656,10 @@ El procedimiento a seguir es el siguiente:
 3.  Desplegar la plantilla procesada:
     
     ```bash
-    aws cloudformation deploy --template-file packaged.yml --stack-name aplicacionecs \
+    aws cloudformation deploy --template-file packaged.yml --stack-name aplicaciones \
       --region us-east-1 --capabilities CAPABILITY_NAMED_IAM
     # El fichero packaged.yml es el que crea el paso anterior de empaquetado
-    # Es posible cambiar el nombre del stack, que en este caso es "aplicacionecs"
+    # Es posible cambiar el nombre del stack, que en este caso es "aplicaciones"
     ```
 
 > [!NOTE]
