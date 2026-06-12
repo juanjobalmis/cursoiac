@@ -2,12 +2,6 @@
 
 set -e
 
-# Configuración de variables del entorno de ejecución de la instancia EC2
-REGION="${region}"
-EFS_ID="${efs_id}"
-SECRET_ARN="${secret_arn}"
-DB_HOST_PARAM="${db_host}"
-
 # Actualización del sistema e instalación de dependencias requeridas
 yum update -y
 yum install -y jq amazon-efs-utils tar wget aws-cli
@@ -54,7 +48,7 @@ chmod +x /opt/tomcat/bin/*.sh
 mkdir -p /opt/tomcat/webapps/ROOT/uploads
 
 # Registro no volátil del montaje NFSv4.1 persistente con soporte _netdev [cite: 22, 24]
-echo "${EFS_ID}.efs.${REGION}.amazonaws.com:/ /opt/tomcat/webapps/ROOT/uploads efs defaults,_netdev,noatime,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0" >> /etc/fstab
+echo "${efs_id}.efs.${region}.amazonaws.com:/ /opt/tomcat/webapps/ROOT/uploads efs defaults,_netdev,noatime,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0" >> /etc/fstab
 
 # Inicialización segura del montaje local mediante fstab [cite: 23, 25]
 mount -a -t efs || mount /opt/tomcat/webapps/ROOT/uploads
@@ -73,7 +67,7 @@ sed -i 's/port="8080"/port="80"/g' /opt/tomcat/conf/server.xml
 # 5. INTEGRACIÓN DE SECRETOS Y CONFIGURACIÓN XML DE TOMCAT
 # ==============================================================================
 # Obtención segura de las variables desde AWS Secrets Manager
-SECRET_VAL=$(aws secretsmanager get-secret-value --secret-id "${SECRET_ARN}" --region "${REGION}" --query SecretString --output text)
+SECRET_VAL=$(aws secretsmanager get-secret-value --secret-id "${secret_arn}" --region "${region}" --query SecretString --output text)
 DB_USER=$(echo "${SECRET_VAL}" | jq -r .db_user)
 DB_PASS=$(echo "${SECRET_VAL}" | jq -r .db_pass)
 TOMCAT_USER=$(echo "${SECRET_VAL}" | jq -r .tomcat_user)
@@ -135,7 +129,7 @@ Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseG1GC"
 
 # Variables de configuración del backend de la aplicación
 Environment="HMAC_SHA_KEY=${HMAC_SHA_KEY}"
-Environment="DB_HOST=${DB_HOST_PARAM}"
+Environment="DB_HOST=${db_host}"
 Environment="DB_USER=${DB_USER}"
 Environment="DB_PASS=${DB_PASS}"
 
