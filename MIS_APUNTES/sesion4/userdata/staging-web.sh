@@ -81,20 +81,18 @@ cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
               xsi:schemaLocation="http://tomcat.apache.org/xml tomcat-users.xsd"
               version="1.0">
-  <role rolename="manager-gui"/>
-  <role rolename="manager-script"/>
-  <role rolename="admin-gui"/>
-  <role rolename="admin-script"/>
-  <user username="$TOMCAT_USER" password="$TOMCAT_PASS" roles="manager-gui,manager-script,admin-gui,admin-script"/>
+    <role rolename="admin"/>
+    <role rolename="admin-gui"/>
+    <role rolename="manager"/>
+    <role rolename="manager-gui"/>
+  <user username="$TOMCAT_USER" password="$TOMCAT_PASS" roles="admin,admin-gui,manager,manager-gui"/>
 </tomcat-users>
 EOF
 chown tomcat:tomcat /opt/tomcat/conf/tomcat-users.xml
 chmod 600 /opt/tomcat/conf/tomcat-users.xml
 
 # CORRECCIÓN DE ROBUSTEZ: Reemplazo lineal y predecible del filtro de acceso IP
-# Esta modificación altera de forma segura el comportamiento predeterminado (RemoteAddrValve)
-sed -i 's/allow="127\\.0\\.0\\.0\\/8,::1\\/128"/allow=".*"/g' /opt/tomcat/webapps/manager/META-INF/context.xml
-sed -i 's/allow="127\.\\d+\\.\d+\\.\\d+|::1|0:0:0:0:0:0:0:1"/allow=".*"/g' /opt/tomcat/webapps/manager/META-INF/context.xml
+sed -i 's|allow="[^"]*"|allow=".*"|g' /opt/tomcat/webapps/manager/META-INF/context.xml
 
 # ==============================================================================
 # 6. DEFINICIÓN DE LA UNIDAD DE SERVICIO SYSTEMD (TIPO SIMPLE)
