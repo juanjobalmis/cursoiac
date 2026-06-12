@@ -55,7 +55,7 @@ cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
   <role rolename="manager-gui"/>
   <role rolename="manager-script"/>
   <role rolename="admin-gui"/>
-  <user username="$TOMCAT_USER" password="$TOMCAT_PASS" roles=""admin,admin-gui,manager,manager-gui"/>
+  <user username="$TOMCAT_USER" password="$TOMCAT_PASS" roles="admin,admin-gui,manager,manager-gui"/>
 </tomcat-users>
 EOF
 
@@ -102,7 +102,6 @@ EOF
 
 # Configurar permisos para el servicio de Tomcat
 chmod 664 /etc/systemd/system/tomcat.service
-update-java-alternatives -l
 
 # Recargar systemd, iniciar y habilitar el servicio de Tomcat
 systemctl daemon-reload
