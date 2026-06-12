@@ -1,7 +1,5 @@
 #!/bin/bash
-# ==============================================================================
-# SCRIPT DE INSTALACIÓN Y OPTIMIZACIÓN DE TOMCAT 11 CON JAVA 25 EN AWS EC2
-# ==============================================================================
+
 set -e
 
 # Configuración de variables del entorno de ejecución de la instancia EC2
@@ -17,7 +15,7 @@ yum install -y jq amazon-efs-utils tar wget aws-cli
 # ==============================================================================
 # 1. INSTALACIÓN DE AMAZON CORRETTO 25 (JDK)
 # ==============================================================================
-# Descarga e instalación limpia de la distribución oficial de Corretto 25 LTS [cite: 35]
+# Descarga e instalación limpia de la distribución oficial de Corretto 25 LTS
 wget https://corretto.aws/downloads/latest/amazon-corretto-25-x64-linux-jdk.tar.gz -P /tmp/
 mkdir -p /usr/local/corretto-25
 tar -xzf /tmp/amazon-corretto-25-x64-linux-jdk.tar.gz -C /usr/local/corretto-25 --strip-components=1
@@ -70,10 +68,6 @@ chmod 750 /opt/tomcat/webapps/ROOT/uploads
 # ==============================================================================
 # Modificación de server.xml para escuchar directamente en el puerto privilegiado 80
 sed -i 's/port="8080"/port="80"/g' /opt/tomcat/conf/server.xml
-
-# NOTA ARQUITECTÓNICA: Se elimina el uso de 'setcap' del sistema de archivos para
-# evitar la inhabilitación del cargador dinámico de libjli.so.
-# La concesión de capacidades de enlace de red se delega de forma exclusiva a Systemd [cite: 8, 9].
 
 # ==============================================================================
 # 5. INTEGRACIÓN DE SECRETOS Y CONFIGURACIÓN XML DE TOMCAT
