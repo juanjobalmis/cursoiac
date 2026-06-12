@@ -25,7 +25,7 @@ chmod 644 /etc/profile.d/java.sh
 # ==============================================================================
 # 2. INSTALACIÓN DE APACHE TOMCAT 11
 # ==============================================================================
-# Obtención de la distribución oficial y desempaquetado en el directorio de servicio [cite: 36, 37]
+# Obtención de la distribución oficial y desempaquetado en el directorio de servicio
 wget https://downloads.apache.org/tomcat/tomcat-11/v11.0.22/bin/apache-tomcat-11.0.22.tar.gz -P /tmp/
 mkdir -p /opt/tomcat
 tar -xzf /tmp/apache-tomcat-11.0.22.tar.gz -C /opt/tomcat --strip-components=1
@@ -68,11 +68,11 @@ sed -i 's/port="8080"/port="80"/g' /opt/tomcat/conf/server.xml
 # ==============================================================================
 # Obtención segura de las variables desde AWS Secrets Manager
 SECRET_VAL=$(aws secretsmanager get-secret-value --secret-id "${secret_arn}" --region "${region}" --query SecretString --output text)
-DB_USER=$(echo "${SECRET_VAL}" | jq -r .db_user)
-DB_PASS=$(echo "${SECRET_VAL}" | jq -r .db_pass)
-TOMCAT_USER=$(echo "${SECRET_VAL}" | jq -r .tomcat_user)
-TOMCAT_PASS=$(echo "${SECRET_VAL}" | jq -r .tomcat_pass)
-HMAC_SHA_KEY=$(echo "${SECRET_VAL}" | jq -r .hmac_sha_key)
+DB_USER=$(echo "$SECRET_VAL" | jq -r .db_user)
+DB_PASS=$(echo "$SECRET_VAL" | jq -r .db_pass)
+TOMCAT_USER=$(echo "$SECRET_VAL" | jq -r .tomcat_user)
+TOMCAT_PASS=$(echo "$SECRET_VAL" | jq -r .tomcat_pass)
+HMAC_SHA_KEY=$(echo "$SECRET_VAL" | jq -r .hmac_sha_key)
 
 # Generación del archivo tomcat-users.xml alineado con el esquema formal de Tomcat 11
 cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
@@ -85,7 +85,7 @@ cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
   <role rolename="manager-script"/>
   <role rolename="admin-gui"/>
   <role rolename="admin-script"/>
-  <user username="${TOMCAT_USER}" password="${TOMCAT_PASS}" roles="manager-gui,manager-script,admin-gui,admin-script"/>
+  <user username="$TOMCAT_USER" password="$TOMCAT_PASS" roles="manager-gui,manager-script,admin-gui,admin-script"/>
 </tomcat-users>
 EOF
 chown tomcat:tomcat /opt/tomcat/conf/tomcat-users.xml
@@ -128,10 +128,10 @@ Environment="JAVA_OPTS=-Djava.awt.headless=true -Djava.security.egd=file:/dev/./
 Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseG1GC"
 
 # Variables de configuración del backend de la aplicación
-Environment="HMAC_SHA_KEY=${HMAC_SHA_KEY}"
+Environment="HMAC_SHA_KEY=$HMAC_SHA_KEY"
 Environment="DB_HOST=${db_host}"
-Environment="DB_USER=${DB_USER}"
-Environment="DB_PASS=${DB_PASS}"
+Environment="DB_USER=$DB_USER"
+Environment="DB_PASS=$DB_PASS"
 
 # Comando de arranque nativo que no bifurca el proceso de ejecución de Systemd
 ExecStart=/opt/tomcat/bin/catalina.sh run
