@@ -77,7 +77,7 @@ En definitiva, **Parameters** actúa como la interfaz de nuestra plantilla, expo
 
 Imaginemos que queremos que nuestra plantilla permita elegir el tipo de instancia EC2. Definimos un parámetro y luego lo usamos en un recurso:  
 
-```yaml{ highlight=[2, 13] }
+```yaml
 Parameters:
   # Definición del parámetro
   InstanceTypeParam:                        
@@ -256,7 +256,7 @@ En resumen, **Mappings** supone una forma sencilla de manejar valores condiciona
   
 #### Ejemplo de Mapping de AMIs por región 
 
-```yaml { highlight=[2, 5, 6, 15] }
+```yaml
 Mappings:
   # Nombre del mapping: RegionMap
   RegionMap:
@@ -343,7 +343,7 @@ Internamente, las Conditions usan las funciones intrínsecas condicionales (`Fn:
 
 #### Ejemplo de Uso de Conditions en recursos
 
-```yaml { highlight=[7, 14, 15] }
+```yaml
 Parameters:
   Entorno:
     Type: String
@@ -380,7 +380,7 @@ En general, es buena práctica confiar en las dependencias implícitas siempre q
 
 #### Ejemplo de Uso de DependsOn
 
-```yaml { highlight=[7, 15-17] }
+```yaml
 Resources:
   MyVPC:
     Type: AWS::EC2::VPC
@@ -630,9 +630,6 @@ Este enfoque garantiza que en 100 cuentas tengamos 100 buckets configurados idé
 
 Eso sí, su uso requiere permisos especiales (un *StackSet admin role* y *execution role* en cuentas destino) por motivos de seguridad, pero una vez configurado, es muy eficiente para despliegues globales.  
 
-
-AQUII !! 1 h  
-
 ## Despliegue y gestión de infraestructura
 
 En esta sección abordaremos:
@@ -645,88 +642,89 @@ En esta sección abordaremos:
 
 Estos temas son clave para administrar CloudFormation en entornos reales, asegurando que los cambios se introducen con control y que la infraestructura se mantiene sincronizada con las templates.  
 
+### Monitorización del progreso de despliegue 
 
-## Monitorización del progreso de despliegue 
-Cuando lanzamos (o actualizamos) una stack, CloudFormation va creando o modificando recursos en orden. Es importante poder seguir ese progreso. La [**consola de AWS CloudFormation**](https://repost.aws/es/knowledge-center/cloudformation-stack-stuck-progress) proporciona la pestaña **Events (Eventos)**, donde cada acción realizada se va registrando en tiempo real: "IN PROGRESS", "FAILED", "COMPLETED"... Cada evento tiene marca de tiempo y el estado del recurso, para entender el progreso del despliegue y las razones de los fallos.
+Cuando lanzamos (o actualizamos) una stack, CloudFormation va creando o modificando recursos en orden. Es importante poder seguir ese progreso. La **[consola de AWS CloudFormation](https://repost.aws/es/knowledge-center/cloudformation-stack-stuck-progress)** proporciona la pestaña **Events (Eventos)**, donde cada acción realizada se va registrando en tiempo real: "IN PROGRESS", "FAILED", "COMPLETED"... Cada evento tiene marca de tiempo y el estado del recurso, para entender el progreso del despliegue y las razones de los fallos.
 
 Además de la vista de eventos en forma de lista, CloudFormation ofrece (desde 2022) una vista gráfica de **Timeline**  del despliegue. En esta visualización, cada recurso de la stack aparece con una barra de progreso que cambia de color según su estado (por ejemplo, azul mientras se crea, verde cuando completa, rojo si falla). También señala claramente cuál recurso fue el *punto de fallo* si la stack entra en rollback. 
 
-<img class="full-height" src="img/timeline.jpg">
+![timeline](images/timeline.jpg)
 
+### Monitorización del progreso de despliegue 
 
+En caso de **error en la creación**, CloudFormation **por defecto realizará un ==rollback==** automático: es decir, intentará deshacer todo lo creado parcialmente, retornando la stack al estado *ROLLBACK_COMPLETE* (o eliminándola si era creación inicial). Todos esos eventos de rollback también se ven en la lista de eventos. Si un recurso tarda mucho, lo veremos “IN PROGRESS” hasta que complete o timeout. 
 
-## Monitorización del progreso de despliegue 
+Fuera de la consola, podemos obtener eventos vía la CLI (`aws cloudformation describe-stack-events`) o AWS SDKs, e incluso configurar notificaciones (por ejemplo SNS) para ciertos cambios de estado. Pero durante un despliegue manual, lo usual es quedarse en la pestaña Eventos haciendo *refresh* (la consola lo auto-refresca) o mirar el Timeline gráfico.
 
-En caso de **error en la creación**, CloudFormation por defecto realizará un **rollback** automático: es decir, intentará deshacer todo lo creado parcialmente, retornando la stack al estado *ROLLBACK_COMPLETE* (o eliminándola si era creación inicial). Todos esos eventos de rollback también se ven en la lista de eventos. Si un recurso tarda mucho, lo veremos “IN PROGRESS” hasta que complete o timeout. 
+En resumen, **monitorizar** significa vigilar los eventos de CloudFormation. Esto nos da transparencia en el proceso: sabemos qué recursos ya están listos, cuáles están pendientes, y si ocurre un fallo vemos el error detallado en el evento (e.j. “Error: Security group X no puede…”).
 
-Fuera de la consola, podemos obtener eventos vía la CLI (`aws cloudformation describe-stack-events`) o AWS SDKs, e incluso configurar notificaciones (por ejemplo SNS) para ciertos cambios de estado. Pero durante un despliegue manual, lo usual es quedarse en la pestaña Eventos haciendo *refresh* (la consola lo auto-refresca) o mirar el Timeline gráfico. 
+**Con esa info, podemos corregir la plantilla o parámetros y reintentar si algo salió mal**. Es una práctica recomendada no desplegar “a ciegas” sino siempre revisar los eventos para confirmar que todo fue exitoso recurso por recurso.  
 
-En resumen, **monitorizar** significa vigilar los eventos de CloudFormation. Esto nos da transparencia en el proceso: sabemos qué recursos ya están listos, cuáles están pendientes, y si ocurre un fallo vemos el error detallado en el evento (e.j. “Error: Security group X no puede…”). 
+## Change Sets (Conjuntos de cambios)
 
-Con esa info, podemos corregir la plantilla o parámetros y reintentar si algo salió mal. Es una práctica recomendada no desplegar “a ciegas” sino siempre revisar los eventos para confirmar que todo fue exitoso recurso por recurso.  
+Antes de aplicar cambios a una stack existente, es altamente recomendable utilizar **Change Sets**, que son básicamente una **previsualización de actualizaciones**: CloudFormation compara la plantilla/parametros nuevos con la versión actual de la stack y genera un listado de **[qué cambios ocurrirían](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-changesets.html)**. No hace el apply todavía, solo nos muestra el plan.
 
+**Al crear un change set, podemos ver cosas como**:
 
-## *Change Sets* (Conjuntos de cambios) 
-Antes de aplicar cambios a una stack existente, es altamente recomendable utilizar **Change Sets**, que son básicamente una **previsualización** de actualizaciones: CloudFormation compara la plantilla/parametros nuevos con la versión actual de la stack y genera un listado de [qué cambios ocurrirían](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-changesets.html). No hace el apply todavía, solo nos muestra el plan. 
+> * “Resource X – *Modify* (propiedad A cambiará de ‘foo’ a ‘bar’)”.
+> * “Resource Y – *Replace* (será eliminado y recreado)”.
+> * “Resource Z – *Add* (nuevo recurso)”.
+> * “Resource W – *Delete* (será eliminado)”.
 
-Al crear un change set, podemos ver cosas como: “Resource X – *Modify* (propiedad A cambiará de ‘foo’ a ‘bar’)”, “Resource Y – *Replace* (será eliminado y recreado)”, “Resource Z – *Add* (nuevo recurso)”, “Resource W – *Delete* (será eliminado)”. 
+También indicará cambios en outputs, etc. De este modo, tenemos la oportunidad de **revisar el impacto antes de ejecutar**. Esto es vital en entornos productivos: **evita sorpresas como borrar un recurso crítico sin querer o provocar un reemplazo de una base de datos**. 
 
-También indicará cambios en outputs, etc. De este modo, tenemos la oportunidad de **revisar el impacto** antes de ejecutar. Esto es vital en entornos productivos: evita sorpresas como borrar un recurso crítico sin querer o provocar un reemplazo de una base de datos. 
+!!! Summary Aplicación de un Change Set
+    Podemos crear change sets desde la consola (subiendo la plantilla nueva y diciendo “Create change set”) o con CLI (`create-change-set`). Luego inspeccionamos el resultado. Si nos convence, entonces procedemos a **Execute** el change set, que efectivamente actualiza la stack aplicando esos cambios. Si no, podemos descartarlo sin tocar nada.
 
-Podemos crear change sets desde la consola (subiendo la plantilla nueva y diciendo “Create change set”) o con CLI (`create-change-set`). Luego inspeccionamos el resultado. Si nos convence, entonces procedemos a **Execute** el change set, que efectivamente actualiza la stack aplicando esos cambios. Si no, podemos descartarlo sin tocar nada. 
+Algunos cambios pueden ser no soportados o no detectados. Por ejemplo, cambiar propiedades no soportadas puede marcar todo el recurso para reemplazo, porque no es capaz de recrearlo en los mismos términos que lo hemos hecho nosotros.
 
+Por eso es valioso revisarlos. También, el change set nos avisa si intentamos cambiar algo no permitido (p.ej. renombrar un *resource logical ID*, que CloudFormation interpretaría como delete+add).
 
+En resumen, los **conjuntos de cambios** nos dan un “diff” entre el estado actual y deseado de la infraestructura, antes de arriesgarnos a hacerlo real.
 
-## *Change Sets* (Conjuntos de cambios) 
-Algunos cambios pueden ser no soportados o no detectados. Por ejemplo, cambiar propiedades no soportadas puede marcar todo el recurso para reemplazo, porque no es capaz de recrearlo en los mismos términos que lo hemos hecho nosotros. 
-
-Por eso es valioso revisarlos. También, el change set nos avisa si intentamos cambiar algo no permitido (p.ej. renombrar un *resource logical ID*, que CloudFormation interpretaría como delete+add). 
-
-En resumen, los **conjuntos de cambios** nos dan un “diff” entre el estado actual y deseado de la infraestructura, antes de arriesgarnos a hacerlo real. 
-
-Es una práctica considerada esencial en cambios de stacks importantes: **así como haríamos *review* de código, hacemos review del *plan de cambios* de infraestructura**. De hecho, en flujos CI/CD automatizados, a veces los change sets se generan y requieren aprobación manual si van a afectar ciertos recursos sensibles. 
+Es una práctica considerada esencial en cambios de stacks importantes: **así como haríamos *review* de código, hacemos review del *plan de cambios* de infraestructura**. De hecho, en flujos CI/CD automatizados, a veces los change sets se generan y requieren aprobación manual si van a afectar ciertos recursos sensibles.
 
 Es una capa extra de control y seguridad en el ciclo de vida de las stacks.  
 
+#### Ejemplo de nterpretando un Change Set
 
-## Ejemplo – Interpretando un Change Set (I)
 Imaginemos que tenemos una stack funcionando con un EC2 de tamaño *t2.micro*. Queremos actualizar la plantilla para usar *t3.small*. En lugar de actualizar directamente, creamos un **Change Set**. CloudFormation detectará la diferencia en la propiedad *InstanceType* de ese recurso.
 
-El change set podría mostrar algo como: 
+**El change set podría mostrar algo como**:
 
-* **Modificar** – AWS::EC2::Instance “MiServidor” – *InstanceType*: de “t2.micro” a “t3.small” ([***Requiere reemplazo***](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-changesets.html)) 
+> * **Modificar** – AWS::EC2::Instance “MiServidor” – *InstanceType*: de “t2.micro” a “t3.small” ([***Requiere reemplazo***](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-changesets.html)) 
 *(Esto indicaría que CloudFormation no puede cambiar el tipo “en caliente” y reemplazará la instancia)*  
 
-Si además añadimos un nuevo recurso en la plantilla, por ejemplo un EIP, el change set listaría:  
-* **Añadir** – AWS::EC2::EIP “IPStatic” – *Nuevo recurso*  
+Si además añadimos un nuevo recurso en la plantilla, por ejemplo un EIP, el change set listaría:
+
+> * **Añadir** – AWS::EC2::EIP “IPStatic” – *Nuevo recurso*  
 
 Y si quitáramos un recurso, diría:  
-* **Eliminar** – LogicalResourceName X (tipo Y) – *Se eliminará*  
 
+> * **Eliminar** – LogicalResourceName X (tipo Y) – *Se eliminará*  
 
-
-## Ejemplo – Interpretando un Change Set (y II)
 Con esta información, podemos decidir. En nuestro caso, vemos que cambiar el tipo de instancia implicará reemplazarla (o sea, crear una nueva instancia t3.small y eliminar la vieja). 
 
 ¿Estamos de acuerdo? Si es producción, esto significaría reinicio en nuevo hardware, lo cual debe planificarse. Gracias al change set, **supimos esto antes** de ejecutar. Podemos entonces hacer quizás un plan (un mantenimiento programado) o pensar otra estrategia (usar un RollingUpdate si estuviera en AutoScalingGroup, etc.). 
 
-Una vez conforme, **ejecutamos el change set y CloudFormation procede con esos cambios**. Si notamos algo indeseado en el diff, simplemente no lo ejecutamos y ajustamos la plantilla. Por ejemplo, si hubiéramos visto una eliminación inesperada de un recurso, podríamos investigar por qué (quizá cambiamos mal un nombre lógico o vete tú a saber). 
+Una vez conforme, **ejecutamos el change set y CloudFormation procede con esos cambios**. Si notamos algo indeseado en el diff, simplemente no lo ejecutamos y ajustamos la plantilla. Por ejemplo, si hubiéramos visto una eliminación inesperada de un recurso, podríamos investigar por qué (quizá cambiamos mal un nombre lógico o vete tú a saber).
 
-En la consola, los change sets aparecen listados bajo la stack. Podemos tener múltiples change sets preparados y solo ejecutar uno. Esta herramienta, por tanto, nos aporta confianza a la hora de actualizar: **nada ocurre hasta dar el OK final, y ese OK lo damos con pleno conocimiento de lo que pasará**.  
+!!! Tip Importante
+    * **En la consola, los change sets aparecen listados bajo la stack**.
+    * **Podemos tener múltiples change sets preparados y solo ejecutar uno**.
 
+Esta herramienta, por tanto, nos aporta confianza a la hora de actualizar: **nada ocurre hasta dar el OK final, y ese OK lo damos con pleno conocimiento de lo que pasará**.  
 
-## Detección de desviaciones (*Drift*) 
+## Detección de desviaciones (*Drift*)
+
 Con el tiempo, es posible que **la infraestructura real sobre el terreno se desvíe de lo que describe la plantilla**, sobre todo si alguien realiza cambios manuales en recursos creados por CloudFormation. 
 
-La [**detección de desviaciones**](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/detect-drift-stack.html) (*drift detection*) es una funcionalidad que permite a CloudFormation **comparar** el estado actual de los recursos en AWS con el esperado según la plantilla original. En otras palabras, nos dice si alguien “se salió del guion” y qué diferencias hay. 
+La [**detección de desviaciones**](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/detect-drift-stack.html) (*drift detection*) es una funcionalidad que permite a CloudFormation **comparar** el estado actual de los recursos en AWS con el esperado según la plantilla original. En otras palabras, nos dice si alguien “se salió del guion” y qué diferencias hay.
 
-Cuando ejecutamos *Detect Drift* en una stack (vía consola o CLI), CloudFormation consulta cada recurso soportado de la pila y verifica propiedades administrables. Luego marca cada recurso con un estado: **IN_SYNC** (si no hay divergencias) o **MODIFIED** (si alguna propiedad fue cambiada externamente). También podría marcar **DELETED** (si alguien eliminó el recurso fuera de CloudFormation) o **NOT_CHECKED** (si el tipo de recurso no soporta drift detection). 
+Cuando ejecutamos *Detect Drift* en una stack (vía consola o CLI), CloudFormation consulta cada recurso soportado de la pila y verifica propiedades administrables. Luego marca cada recurso con un estado: **IN_SYNC** (si no hay divergencias) o **MODIFIED** (si alguna propiedad fue cambiada externamente). También podría marcar **DELETED** (si alguien eliminó el recurso fuera de CloudFormation) o **NOT_CHECKED** (si el tipo de recurso no soporta drift detection).
 
-Podemos entonces ver un **informe detallado de desviación al estilo Git**: para recursos *MODIFIED*, listará qué propiedad difiere, mostrando valor esperado vs valor actual. Por ejemplo, podría indicarnos que en un Security Group se esperaba puerto 80 abierto pero actualmente también está abierto el 22 – lo cual sería una desviación no contemplada en la plantilla. O que tal instancia tiene un *Tag* extra que no estaba en la definición. 
+Podemos entonces ver un **informe detallado de desviación al estilo Git**: para recursos *MODIFIED*, listará qué propiedad difiere, mostrando valor esperado vs valor actual. Por ejemplo, podría indicarnos que en un Security Group se esperaba puerto 80 abierto pero actualmente también está abierto el 22 – lo cual sería una desviación no contemplada en la plantilla. O que tal instancia tiene un *Tag* extra que no estaba en la definición.
 
-
-
-## Detección de desviaciones (*Drift*) 
 La detección de drift **no corrige** nada automáticamente, es informativa, **al contrario que Terraform, que tiene mecanismos de reconciliación automática**). Sirve para auditar: si encontramos desviaciones, podemos decidir alinearlas, ya sea aplicando una actualización de stack que restablezca los valores, o anotando la plantilla para incluir ese cambio permanentemente. 
 
 También puede servirnos para detectar incidentes de seguridad donde alguien hizo un cambio que debemos revertir manualmente. **Para establecer respuestas, mitigaciones o correcciones automáticas** se utilizarían otros frameworks interconectados específicos como *AWS Config* o *AWS Systems Manager*.
@@ -735,74 +733,119 @@ Esta detección de desviaciones es útil donde varios administradores podrían t
 
 En resumen, la **detección de desviaciones** es un guardián de la fidelidad entre template y stack. Ayuda a [**identificar cambios no gestionados**](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/stacksets-drift.html) (hechos fuera de CloudFormation), pudiendo confiar en que el IaC refleja el estado real y detectando dónde no es así. Esto es fundamental para mantener la IaC como *fuente de verdad*.  
 
+### Ejemplos de detección de drift en una stack
 
-## Ejemplo – Detectando drift en una stack (I)
-Supongamos que un administrador, por fuera de CloudFormation, entra a la consola EC2 y abre el puerto 22 en un Security Group que originalmente en la plantilla solo tenía el 80. Nuestra plantilla no sabe de ese cambio. Si ejecutamos [**Detect Drift**](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/detect-drift-stack.html) en la stack: 
+Supongamos que un administrador, por fuera de CloudFormation, entra a la consola EC2 y abre el puerto 22 en un Security Group que originalmente en la plantilla solo tenía el 80. Nuestra plantilla no sabe de ese cambio. Si ejecutamos **[Detect Drift](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/detect-drift-stack.html)** en la stack: 
 
 * La stack resultará con estado **MODIFIED** (desviada), porque al menos un recurso lo está.  
 
 * En el detalle de drift, veremos el Security Group en cuestión marcado como *MODIFIED*, expandido: Al expandirlo, CloudFormation mostrará algo como:  
-  - Ingress rule “TCP 22” – **Present in actual**, **Absent in template** (es decir, detecta que existe una regla de SSH en el recurso real que no figura en la definición de la plantilla). 
+  * Ingress rule “TCP 22” – **Present in actual**, **Absent in template** (es decir, detecta que existe una regla de SSH en el recurso real que no figura en la definición de la plantilla). 
 
-Con esa información, sabemos exactamente qué pasó: **alguien abrió SSH manualmente**. Ahora podemos decidir: o bien actualizamos la plantilla para incluir esa regla (si consideramos que debe formar parte del estado deseado), o la quitamos manualmente del recurso para volver al estado original. 
+Con esa información, sabemos exactamente qué pasó: **alguien abrió SSH manualmente**. Ahora podemos decidir: o bien actualizamos la plantilla para incluir esa regla (si consideramos que debe formar parte del estado deseado), o la quitamos manualmente del recurso para volver al estado original.
 
-Hasta que no resolvamos, esa stack seguirá figurando como *drifted*. 
+Hasta que no resolvamos, esa stack seguirá figurando como *drifted*.
 
+**Otro ejemplo**: Si alguien borró un bucket creado por la stack. El drift detection listará ese bucket como **DELETE** – CloudFormation informará que esperaba un recurso con tal nombre lógico pero ya no existe. En tal caso, la stack está en un estado inconsistente (CloudFormation cree que hay un recurso que no está).
 
+**La solución sería recrearlo** (posiblemente con una actualización de stack), o eliminarlo de la plantilla y actualizar para “oficializar” la eliminación.
 
-## Ejemplo – Detectando drift en una stack (y II)
-Otro ejemplo: si alguien borró un bucket creado por la stack. El drift detection listará ese bucket como **DELETE** – CloudFormation informará que esperaba un recurso con tal nombre lógico pero ya no existe. En tal caso, la stack está en un estado inconsistente (CloudFormation cree que hay un recurso que no está). 
+En resumen, estos informes de drift nos dan **visibilidad post-deployment**. Podemos integrarlos en auditorías.
 
-**La solución sería recrearlo** (posiblemente con una actualización de stack), o eliminarlo de la plantilla y actualizar para “oficializar” la eliminación. 
-
-En resumen, estos informes de drift nos dan **visibilidad post-deployment**. Podemos integrarlos en auditorías. 
-
-Por ejemplo, podríamos ejecutar la detección de drift semanalmente y revisar que ninguna desviación crítica haya ocurrido. Si las hay, notificar al equipo responsable para que lo solucione o implementar alguna automatización que corrija el error.
+Por ejemplo, **podríamos ejecutar la detección de drift semanalmente y revisar que ninguna desviación crítica haya ocurrido**. Si las hay, notificar al equipo responsable para que lo solucione o implementar alguna automatización que corrija el error.
 
 De esta forma mantenemos la disciplina de IaC: cualquier cambio deseado debería codificarse en la plantilla, no hecho a mano en producción. CloudFormation nos alerta cuando eso no se cumple.
 
-
 ## Reemplazo de recursos en infraestructura desplegada 
-Al actualizar una stack, algunos cambios pueden aplicarse “en el sitio” sin interrumpir (p.ej., cambiar el tamaño de un Auto Scaling Group), otros implican una pequeña interrupción (reinicios) y otros requieren [**reemplazar por completo el recurso**](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-update-behaviors.html). 
 
-Un *reemplazo* significa que CloudFormation creará un nuevo recurso (con nuevo ID físico) con la nueva configuración y eliminará el antiguo. Por ejemplo, cambiar la *AvailabilityZone* de una instancia EC2 no es posible directamente: CloudFormation **creará una instancia nueva en la AZ deseada, pasará dependencias a la nueva y luego eliminará la instancia original**. 
+Al actualizar una stack, algunos cambios pueden aplicarse “en el sitio” sin interrumpir (p.ej., cambiar el tamaño de un Auto Scaling Group), otros implican una pequeña interrupción (reinicios) y otros requieren **[reemplazar por completo el recurso](https://docs.aws.amazon.com/es_es/AWSCloudFormation/latest/UserGuide/using-cfn-updating-stacks-update-behaviors.html)**. 
 
-CloudFormation, al necesitar reemplazar un recurso, **intenta minimizar el impacto**: suele crear primero el nuevo recurso, migrar las dependencias y luego borrar el anterior. Aun así, hay casos donde esto causa interrupción de servicio: por ejemplo, reemplazar una base de datos RDS significa levantar una nueva bdd y destruir la anterior (a menos que hagamos nosotros migración de datos). 
+Un **reemplazo** significa que CloudFormation creará un nuevo recurso (con nuevo ID físico) con la nueva configuración y eliminará el antiguo. Por ejemplo, cambiar la *AvailabilityZone* de una instancia EC2 no es posible directamente: CloudFormation **creará una instancia nueva en la AZ deseada, pasará dependencias a la nueva y luego eliminará la instancia original**.
 
-En los *change sets* veremos marcados los recursos que serían reemplazados (“**Replacement: True**”). Cada tipo de recurso tiene documentado qué propiedades causan reemplazo si se cambian. 
+CloudFormation, al necesitar reemplazar un recurso, **intenta minimizar el impacto**: suele crear primero el nuevo recurso, migrar las dependencias y luego borrar el anterior. Aun así, hay casos donde esto causa interrupción de servicio: por ejemplo, reemplazar una base de datos RDS significa levantar una nueva bdd y destruir la anterior (a menos que hagamos nosotros migración de datos).
 
+En los **change sets** veremos marcados los recursos que serían reemplazados (“**Replacement: True**”). Cada tipo de recurso tiene documentado qué propiedades causan reemplazo si se cambian.
 
+Como administradores, debemos **planificar cuidadosamente** los reemplazos.** Si CloudFormation va a reemplazar un recurso crítico, debemos preparar backups, downtime**, etc. 
 
-## Reemplazo de recursos en infraestructura desplegada 
-Como administradores, debemos **planificar cuidadosamente** los reemplazos. Si CloudFormation va a reemplazar un recurso crítico, debemos preparar backups, downtime, etc. 
+Por ejemplo, cambiar el puerto de escucha de una base de datos Amazon RDS **provoca reemplazo completo de la instancia**. Antes de aplicar un cambio así en producción, querríamos: hacer snapshot de la DB existente, notificar a las aplicaciones de una posible indisponibilidad, asegurarnos de que las apps están preparadas para la nueva config (nuevo puerto)... y luego ya restaurar los datos en la nueva instancia una vez creada.
 
-Por ejemplo, cambiar el puerto de escucha de una base de datos Amazon RDS **provoca reemplazo completo de la instancia**. Antes de aplicar un cambio así en producción, querríamos: hacer snapshot de la DB existente, notificar a las aplicaciones de una posible indisponibilidad, asegurarnos de que las apps están preparadas para la nueva config (nuevo puerto)... y luego ya restaurar los datos en la nueva instancia una vez creada. 
+CloudFormation nos da herramientas para atenuar: **DeletionPolicy** y **UpdateReplacePolicy** permiten, por ejemplo, decir que si un recurso va a ser reemplazado o borrado, mejor que conserve el antiguo (Retain) **o haga snapshot antes de borrar** (muy útil en RDS, EBS, etc.). Así no se pierden datos inadvertidamente.
 
-CloudFormation nos da herramientas para atenuar: **DeletionPolicy** y **UpdateReplacePolicy** permiten, por ejemplo, decir que si un recurso va a ser reemplazado o borrado, mejor que conserve el antiguo (Retain) **o haga snapshot antes de borrar** (muy útil en RDS, EBS, etc.). Así no se pierden datos inadvertidamente. 
+En resumen, al diseñar actualizaciones, hay que identificar cambios disruptivos y prepararlos. CloudFormation se encarga de la mecánica de creación y eliminación, pero la **continuidad del servicio** o migración de datos es responsabilidad nuestra. **Los reemplazos no son “malos” per se** (a veces no hay otra forma de modificar algo que por descuido no está donde debiera y no hay más que hacer), pero requieren precaución adicional en función del lío que conlleven.  
 
-En resumen, al diseñar actualizaciones, hay que identificar cambios disruptivos y prepararlos. CloudFormation se encarga de la mecánica de creación y eliminación, pero la *continuidad del servicio* o migración de datos es responsabilidad nuestra. **Los reemplazos no son “malos” *per se* ** (a veces no hay otra forma de modificar algo que por descuido no está donde debiera y no hay más que hacer), pero requieren precaución adicional en función del lío que conlleven.  
+### Ejemplo de planificación de un reemplazo (actualización de RDS I) 
 
-
-
-## Ejemplo – Planificando un reemplazo (actualización de RDS I) 
-Pongamos que necesitamos activar el cifrado en una base de datos RDS existente. Esta propiedad **en RDS no se puede cambiar en caliente**: CloudFormation deberá **reemplazar la instancia** (crear una nueva con cifrado habilitado y borrar la vieja). Antes de proceder, como administradores deberíamos: 
+Pongamos que necesitamos activar el cifrado en una base de datos RDS existente. Esta propiedad **en RDS no se puede cambiar en caliente**: CloudFormation deberá **reemplazar la instancia** (crear una nueva con cifrado habilitado y borrar la vieja). Antes de proceder, como administradores deberíamos:
 
 * **Plantear la idoneidad de la acción y alternativas de menor impacto**, aunque en este caso concreto, suponiendo que sea un requisito de *Compliance* no habrá más opción que hacerlo.
-
 * **Hacer un snapshot** manual de la base de datos actual, para tener un respaldo reciente de los datos.  
-
 * **Planificar la interrupción**: durante el reemplazo, habrá tiempo de inactividad. Preparamos a las aplicaciones que usan la DB para reconectarse o esperar mientras ocurre la sustitución. Quizá programamos el cambio en una ventana de mantenimiento.  
-
 * **Actualizar la configuración de las aplicaciones** si cambia algo relevante (por ejemplo, el endpoint podría cambiar si no mantenemos el mismo nombre DNS). En este caso, el endpoint de RDS suele permanecer igual si se usa un Endpoint DNS, pero si cambiáramos puerto u otra config, hay que asegurarse de notificar a las apps.  
-
-## Ejemplo – Planificando un reemplazo (actualización de RDS y II) 
-
 * **Restaurar datos**: tras crear la nueva instancia, usamos el snapshot para restaurar los datos en la nueva, si no se migraron automáticamente. En RDS, si actualizas ciertas propiedades, CloudFormation migrará datos creando una réplica o similar, pero en otros casos quizá toque restaurar manualmente desde backup.  
 
-CloudFormation hará: crear nueva RDS cifrada, esperar a que esté lista, apuntar dependencias a la nueva, luego borrar la antigua. 
+CloudFormation hará: crear nueva RDS cifrada, esperar a que esté lista, apuntar dependencias a la nueva, luego borrar la antigua.
 
-Durante ese proceso, la app puede experimentar errores de conexión. Por eso tomamos las medidas anteriores. *DeletionPolicy: Snapshot* en la RDS podría ser prudente: CloudFormation tomaría un snapshot automáticamente al borrar la instancia vieja, como copia de seguridad adicional. 
+Durante ese proceso, la app puede experimentar errores de conexión. Por eso tomamos las medidas anteriores. *DeletionPolicy: Snapshot* en la RDS podría ser prudente: CloudFormation tomaría un snapshot automáticamente al borrar la instancia vieja, como copia de seguridad adicional.
 
-Aunque este ejemplo se centra en RDS, el mismo concepto aplica a cualquier recurso: si ves *Replacement*, piensa “*¿qué significa reemplazar este recurso en mi servicio? ¿Qué debo hacer antes/durante/después para que todo siga funcionando o para no perder datos?*”. 
+Aunque este ejemplo se centra en RDS, el mismo concepto aplica a cualquier recurso: si ves *Replacement*, piensa “*¿qué significa reemplazar este recurso en mi servicio? ¿Qué debo hacer antes/durante/después para que todo siga funcionando o para no perder datos?*”.
 
 Con la debida planificación, **incluso cambios disruptivos pueden realizarse con mínimo impacto**. La clave es usar las herramientas de CloudFormation (snapshots, retain, etc.) y nuestras propias estrategias y sentido común.  
+
+## Galería de ejemplos de CloudFormation
+
+AWS proporciona **[una galería oficial de plantillas de CloudFormation](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-snippets.html)** que sirven como ejemplos prácticos de múltiples arquitecturas y casos de uso. Estas plantillas de muestra abarcan desde configuraciones sencillas hasta despliegues completos de aplicaciones muy conocidas. Podemos usarlas directamente para desplegar esas soluciones o estudiarlas para aprender patrones de CloudFormation. Muchos de estos ejemplos ilustran buenas prácticas, integración de scripts de bootstrap, uso de parámetros y mappings, etc. 
+
+También tienes a tu disposición el sitio **[AWS Solutions Library](https://aws.amazon.com/es/solutions/)**, con soluciones para diferentes sectores que suelen incluir ejemplos de implementación y plantillas de CloudFormation.
+
+A continuación, revisaremos algunos **ejemplos destacados de la galería oficial**: soluciones comunes o interesantes que ilustran el poder de CloudFormation en escenarios reales. Estos ejemplos van desde desplegar una simple aplicación en una instancia, hasta arquitecturas de alta disponibilidad con múltiples AZ, pasando por contenedores ECS y CDN global.  
+
+### Ejemplo 1: WordPress en una instancia EC2 
+
+Uno de los ejemplos clásicos son **[pila LAMP o desplegar WordPress por enésima vez](https://aws.amazon.com/es/cloudformation/templates/aws-cloudformation-templates-us-west-2/)**, usando CloudFormation. La galería ofrece plantillas que instalan WordPress automáticamente en un servidor: por ejemplo, una plantilla que lanza una instancia EC2 Linux y en el mismo servidor instala Apache, PHP y MySQL (LAMP stack), u otra que además separa la capa de datos a RDS (*VPC_Wordpress_Single_Instance_With_RDS*). 
+
+Estas plantillas aprovechan los **scripts de arranque** de CloudFormation. En particular, el ejemplo [*wordpress-via-cfn-bootstrap.template*](https://aws.amazon.com/es/cloudformation/templates/aws-cloudformation-templates-us-west-2/#:~:text=wordpress%2Dvia%2Dcfn%2Dbootstrap.template) utiliza **cfn-init** para descargar e instalar WordPress automáticamente durante el despliegue. Sólo hay que proporcionar parámetros como la contraseña de admin de WordPress, el tamaño de instancia, etc. Al lanzar la stack, en unos minutos sale un sitio WordPress funcional. 
+
+Se parece mucho a ejemplos vistos, demostrando que CloudFormation puede no solo crear la infraestructura (EC2, Security Group, RDS, etc) sino también configurar la aplicación en sí. Con pequeños (o grandes) cambios podríamos adaptarlo a otras aplicaciones LAMP que usemos.
+
+### Ejemplo 2: Arquitectura web alta disponibilidad (multi-AZ)
+
+La galería oficial incluye plantillas que despliegan **arquitecturas web de alta disponibilidad**. Un ejemplo clásico parecido a los vistos es una plantilla que crea un grupo de servidores web en múltiples *Availability Zones*, detrás de un Balanceador de Carga (ELB/ALB), junto a una base de datos Amazon RDS configurada en Multi-AZ para tolerancia a fallos.
+
+En estas plantillas **Highly Available Web Server with Multi-AZ Amazon RDS** (para muchas apps), similares a otras de la formación, se utilizan un **Auto Scaling Group** para los servidores web en al menos dos AZs, un **Load Balancer** público distribuyendo el tráfico entre ellos, y la **base de datos RDS (Multi-AZ)** para asegurar AD. CloudFormation orquesta todo: crea las subnets en distintas AZ, las instancias en cada una, configura el ALB apuntando a ellas, y lanza el RDS Multi-AZ. Como hacemos en otros ejemplos, almacena los archivos estáticos en S3 o EFS.
+
+Este ejemplo es útil para ver en el *Timeline* cómo CloudFormation maneja dependencias complejas: primero la red, luego el RDS, los security groups adecuados, después las instancias y el registro en el ELB, RDS, etc., todo en el orden correcto. 
+
+### Ejemplo 3: Aplicación en contenedores con ECS
+
+La documentación proporciona ejemplos de cómo desplegar clústeres ECS, servicios y tareas vía CloudFormation. Un caso sencillo es crear un [**Cluster ECS**](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/quickref-ecs.html) vacío (Docker, ya sea con EC2 o Fargate) mediante un recurso `AWS::ECS::Cluster`. A partir de ahí, otra plantilla (o sección) podría definir una **Task Definition** para la aplicación en contenedor y un **Service** que ejecute esa task en el cluster. 
+
+Por ejemplo, en otra documentación hay una muestra de [**servicio ECS Fargate con una tarea web simple**](https://docs.aws.amazon.com/codecatalyst/latest/userguide/deploy-tut-ecs.html). Podríamos desplegar una aplicación Docker con Apache o Nginx en Fargate: CloudFormation definiría la TaskDefinition (imagen de Docker, puertos, etc.), el Service asociándolo a nuestro Cluster, y opcionalmente un Application Load Balancer para distribuir tráfico al servicio. 
+
+Aunque en la página de *sample templates* clásica no hay muchas veces casos ECS completos, AWS sí ofrece ejemplos en workshops y blogs, aparte de los que ofrecemos en esta formación. Uno interesante es el blueprint de [**Blue/Green deployments en ECS con CloudFormation**](https://aws.amazon.com/es/blogs/devops/blue-green-deployments-to-amazon-ecs-using-aws-cloudformation-and-aws-codedeploy). Si se prefiere ir más poco a poco, hay un ejemplo oficial de crear un cluster ECS en EC2 con la AMI optimizada ECS y Auto Scaling (con Capacity Provider), y luego muestra cómo lanzar un servicio que aprovecha ese cluster. 
+
+### Ejemplo 4: Auto Scaling con políticas de escalado 
+
+En el ejemplo **[AutoScalingMultiAZWithNotifications](https://s3-us-west-2.amazonaws.com/cloudformation-templates-us-west-2/AutoScalingMultiAZWithNotifications.template)**, crea un grupo Auto Scaling con instancias en múltiples AZ, detrás de un Load Balancer, y configura políticas de scaling y notificaciones por email cuando ocurre un escalado. Así se ven políticas de autoescalado con umbrales, alarmas y el uso de **SNS para alertas**: en la plantilla se pone un email y te suscribe con ese email a notificaciones de eventos de Auto Scaling. 
+
+Otro ejemplo, **[AutoScalingRollingUpdates](https://s3-us-west-2.amazonaws.com/cloudformation-templates-us-west-2/AutoScalingRollingUpdates.template)**, muestra cómo realizar **actualizaciones graduales** en un grupo Auto Scaling. La plantilla crea un ASG con una *UpdatePolicy* para rolling update: esto significa que si actualizamos la *launch template* (por ejemplo, nueva AMI v2), CloudFormation no dará de baja todas las instancias a la vez, sino que irá reemplazándolas en lotes (lo más prudente, de una en una) respetando cierta capacidad mínima.
+
+Este ejemplo es interesante para demostrar cómo se hace el despliegue de nuevas versiones de aplicaciones con cero downtime en entornos con múltiples instancias. En la plantilla se puede ajustar el número máximo de instancias que se pueden reemplazar simultáneamente, la pausa entre batchs, etc., a través de la propiedad **AutoScalingRollingUpdate**.
+
+### Ejemplo 5: Plantilla de red (VPC con subnets, NAT, etc.)
+
+Otro ejemplo fundamental es el despliegue de una **infraestructura de red** completa via CloudFormation. La galería ofrece entre otros las templates del apartado *Multi-tier VPC*.
+
+Un caso es **[multi-tier-web-app-in-vpc](https://s3-us-west-2.amazonaws.com/cloudformation-templates-us-west-2/multi-tier-web-app-in-vpc.template)** que crea una VPC clásica con subredes pública y privada, un *Internet Gateway* para la pública, *NAT Gateway* para permitir que la privada tenga salida a Internet, y  un bastión (jump box) en la pública para SSH. Luego en la subred privada despliega servidores de aplicación y en la pública un ELB para darles accesibilidad sin exposición. Crea *ACLs* y *Security Groups* para aislar capas.
+
+Muchas veces, la galería incluye parámetros para rango CIDR, cantidad de subnets, etc., para hacerla reutilizable en distintos contextos y elementos accesorios.
+
+Está bien para ilustrar buenas prácticas de arquitectura AWS: uso de Multi-AZ subnets para alta disponibilidad de capas, NAT Gateway en AD, bastion host aislado, etc.  
+
+### Ejemplo 6: Distribución de contenido global con CloudFront
+
+La galería también cubre servicios de nivel superior. Un ejemplo interesante es una plantilla que configura Amazon **[CloudFront (CDN) con un bucket S3 de origen para contenido estático](https://s3-us-west-2.amazonaws.com/cloudformation-templates-us-west-2/CloudFront_S3.template)**. Esta plantilla crea un bucket S3 (por ejemplo para un sitio web estático o assets) y luego una distribución CloudFront que apunta a ese bucket como origen, con configuración de behaviors, HTTPS-only, etc.
+
+Otra variante es **[CloudFront_MultiOrigin](https://s3-us-west-2.amazonaws.com/cloudformation-templates-us-west-2/CloudFront_MultiOrigin.template)**, que muestra cómo CloudFront puede tener múltiples orígenes (por ejemplo, S3 para contenido estático y un ALB para contenido dinámico/API). CloudFormation permite describir todo eso: se definen las distribuciones, sus cache behaviors (p. ej., URL path patterns mapeados a distintos orígenes), y las configuraciones de error pages, logging, etc. 
+
+Estos ejemplos son importantes para introducirse en el **despliegue de aplicaciones modernas**, donde la mayor parte del tráfico de una aplicación son datos estáticos que deben cachearse cerca del cliente para dar una buena experiencia de usuario, mientras que las peticiones dinámicas van a balanceadores de carga, API Gateway, etc. Cloudfront sirve para hacer esa distinción, cachear y regular comportamientos y automatizar y sistematizar su despliegue es básico.
