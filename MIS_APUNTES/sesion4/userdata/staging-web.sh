@@ -34,12 +34,8 @@ rm -f /tmp/apache-tomcat-11.0.22.tar.gz
 # Creación exclusiva del grupo y usuario del sistema sin privilegios de shell
 groupadd -r tomcat
 useradd -r -s /bin/false -g tomcat -d /opt/tomcat tomcat
-
-# Configuración de permisos de aislamiento del sistema de archivos
 chown -R tomcat:tomcat /opt/tomcat
-chmod -R g+r /opt/tomcat/conf
-chmod g+x /opt/tomcat/conf
-chmod +x /opt/tomcat/bin/*.sh
+sh -c 'chmod +x /opt/tomcat/bin/*.sh'
 
 # ==============================================================================
 # 3. MONTAJE INTEGRADO DEL SISTEMA DE ARCHIVOS DISTRIBUIDO (AWS EFS)
@@ -47,10 +43,10 @@ chmod +x /opt/tomcat/bin/*.sh
 # Creación física del punto de montaje local de la aplicación
 mkdir -p /opt/tomcat/webapps/ROOT/uploads
 
-# Registro no volátil del montaje NFSv4.1 persistente con soporte _netdev [cite: 22, 24]
+# Registro no volátil del montaje NFSv4.1 persistente con soporte _netdev
 echo "${efs_id}.efs.${region}.amazonaws.com:/ /opt/tomcat/webapps/ROOT/uploads efs defaults,_netdev,noatime,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0" >> /etc/fstab
 
-# Inicialización segura del montaje local mediante fstab [cite: 23, 25]
+# Inicialización segura del montaje local mediante fstab
 mount -a -t efs || mount /opt/tomcat/webapps/ROOT/uploads
 
 # CORRECCIÓN DE SEGURIDAD CRÍTICA: Cambiar propietario del directorio DESPUÉS de montar EFS
@@ -89,10 +85,12 @@ cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
 </tomcat-users>
 EOF
 chown tomcat:tomcat /opt/tomcat/conf/tomcat-users.xml
-chmod 600 /opt/tomcat/conf/tomcat-users.xml
+chmod 666 /opt/tomcat/conf/tomcat-users.xml
 
-# CORRECCIÓN DE ROBUSTEZ: Reemplazo lineal y predecible del filtro de acceso IP
+# CORRECCIÓN DE ROBUSTEZ: Eliminamos las restricciones de acceso a la consola de administración 
+# y al gestor de aplicaciones en context.xml para permitir el acceso desde cualquier dirección IP
 sed -i 's|allow="[^"]*"|allow=".*"|g' /opt/tomcat/webapps/manager/META-INF/context.xml
+sed -i 's|allow="[^"]*"|allow=".*"|g' /opt/tomcat/webapps/host-manager/META-INF/context.xml
 
 # ==============================================================================
 # 6. DEFINICIÓN DE LA UNIDAD DE SERVICIO SYSTEMD (TIPO SIMPLE)
@@ -107,7 +105,8 @@ RequiresMountsFor=/opt/tomcat/webapps/ROOT/uploads
 
 [Service]
 # Monitoreo directo del hilo de ejecución de la JVM de Java
-Type=simple
+# Type=simple (ALT)
+Type=forking
 
 User=tomcat
 Group=tomcat
@@ -123,7 +122,9 @@ Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
 
 # Parámetros de ajuste de rendimiento de la máquina virtual de Java 25
 Environment="JAVA_OPTS=-Djava.awt.headless=true -Djava.security.egd=file:/dev/./urandom"
-Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseG1GC"
+
+# Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseG1GC" (ALT)
+Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseParallelGC"
 
 # Variables de configuración del backend de la aplicación
 Environment="HMAC_SHA_KEY=$HMAC_SHA_KEY"
@@ -132,17 +133,17 @@ Environment="DB_USER=$DB_USER"
 Environment="DB_PASS=$DB_PASS"
 
 # Comando de arranque nativo que no bifurca el proceso de ejecución de Systemd
-ExecStart=/opt/tomcat/bin/catalina.sh run
+# ExecStart=/opt/tomcat/bin/catalina.sh run (ALT)
+ExecStart=/opt/tomcat/bin/startup.sh
+ExecStop=/opt/tomcat/bin/shutdown.sh
 
-# Aislamiento y Concesión Segura de Capacidades a Nivel de Proceso
-AmbientCapabilities=CAP_NET_BIND_SERVICE
-CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-SecureBits=keep-caps
-PrivateTmp=true
-NoNewPrivileges=true
-
-# Código de terminación ordinaria del proceso Java ante señales del sistema
-SuccessExitStatus=143
+# Aislamiento y Concesión Segura de Capacidades a Nivel de Proceso (ALT)
+# AmbientCapabilities=CAP_NET_BIND_SERVICE
+# CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+# SecureBits=keep-caps
+# PrivateTmp=true
+# NoNewPrivileges=true
+# SuccessExitStatus=143
 
 [Install]
 WantedBy=multi-user.target
@@ -160,5 +161,9 @@ systemctl daemon-reload
 # Habilitación y arranque ordenado del servicio Tomcat
 systemctl enable tomcat
 systemctl start tomcat
+
+# Validación del estado del servicio y verificación de puertos abiertos
+systemctl status tomcat --no-pager -l
+netstat -at
 
 echo "Aprovisionamiento y optimización de Apache Tomcat 11 y Java 25 completados con éxito."
