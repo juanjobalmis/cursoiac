@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Despliegue de entorno DAM: EC2 con Tomcat 11 (HTTPS), Java 25, MySQL Server, Elastic IP y despliegue continuo desde S3.'
+Description: 'Despliegue de entorno DAM: EC2 con Tomcat 11 (HTTPS), Java 25, MySQL Server, Elastic IP y despliegue continuo controlado por eventos SQS.'
 
 Parameters:
   VpcId:
@@ -24,16 +24,9 @@ Parameters:
   KeyName:
     Type: AWS::EC2::KeyPair::KeyName
     Description: Par de claves SSH para acceso a la máquina.
-  DbUser:
-    Type: String
-    NoEcho: true
-    Description: Usuario de la base de datos de la aplicación.
-  DbPass:
-    Type: String
-    NoEcho: true
-    Description: Contraseña de la base de datos de la aplicación.
   TomcatUser:
     Type: String
+    Default: tomcat
     NoEcho: true
     Description: Usuario administrador de Tomcat.
   TomcatPass:
@@ -60,19 +53,50 @@ Parameters:
 Resources:
   # ==========================================
   # SECRET MANAGER
+  # Añadir credenciales sensibles en los parámetros a AWS Secrets Manager para evitar exponerlas en el template.
   # ==========================================
   AppSecrets:
     Type: AWS::SecretsManager::Secret
     Properties:
       Name: !Sub "AppSecrets-${AWS::StackName}"
       Description: "Credenciales centralizadas para base de datos y Tomcat"
-      SecretString: !Sub '{"db_user":"${DbUser}","db_pass":"${DbPass}","tomcat_user":"${TomcatUser}","tomcat_pass":"${TomcatPass}","hmac_sha_key":"${HmacShaKey}","mysql_root_pass":"${MysqlRootPass}","mysql_remote_user":"${MysqlRemoteUser}","mysql_remote_pass":"${MysqlRemotePass}"}'
+      SecretString: !Sub '{"tomcat_user":"${TomcatUser}","tomcat_pass":"${TomcatPass}","hmac_sha_key":"${HmacShaKey}","mysql_root_pass":"${MysqlRootPass}","mysql_remote_user":"${MysqlRemoteUser}","mysql_remote_pass":"${MysqlRemotePass}"}'
+
+  # ==========================================
+  # COLA SQS Y POLÍTICA DE ACCESO
+  # Almacena los eventos de S3 para que la instancia EC2 haga Long Polling de forma limpia.
+  # ==========================================
+  DeployQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "dam-deploy-queue-${AWS::StackName}"
+      ReceiveMessageWaitTimeSeconds: 20
+
+  DeployQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref DeployQueue
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: "s3.amazonaws.com"
+            Action: "sqs:SendMessage"
+            Resource: !GetAtt DeployQueue.Arn
+            Condition:
+              ArnLike:
+                aws:SourceArn: !Sub "arn:aws:s3:::dam-deploy-bucket-${AWS::AccountId}-${AWS::Region}"
 
   # ==========================================
   # BUCKET S3 PARA DESPLIEGUE (app.war)
+  # Bucket S3 donde subir el archivo app.war para que la instancia EC2 lo despliegue automáticamente.
+  # Notifica inmediatamente a SQS ante cualquier evento de subida.
   # ==========================================
   AppDeploymentBucket:
     Type: AWS::S3::Bucket
+    DependsOn: DeployQueuePolicy
     Properties:
       BucketName: !Sub "dam-deploy-bucket-${AWS::AccountId}-${AWS::Region}"
       PublicAccessBlockConfiguration:
@@ -80,9 +104,20 @@ Resources:
         IgnorePublicAcls: true
         BlockPublicPolicy: true
         RestrictPublicBuckets: true
+      NotificationConfiguration:
+        QueueConfigurations:
+          - Event: "s3:ObjectCreated:*"
+            Queue: !GetAtt DeployQueue.Arn
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: "app.war"
 
   # ==========================================
   # GRUPO DE SEGURIDAD
+  # Permite tráfico HTTPS (443) desde cualquier IP, SSH (22) y MySQL (3306) solo desde la IP permitida.
+  # indicada en los parámetros. Se asocia a la instancia EC2 principal.
   # ==========================================
   AppSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -105,6 +140,7 @@ Resources:
 
   # ==========================================
   # ELASTIC IP
+  # Se crea una Elastic IP y se asocia a la instancia EC2 principal para que tenga una IP pública fija.
   # ==========================================
   AppEIP:
     Type: AWS::EC2::EIP
@@ -118,25 +154,320 @@ Resources:
       AllocationId: !GetAtt AppEIP.AllocationId
 
   # ==========================================
-  # IAM ROLE (PERFIL DE INSTANCIA)
-  # ==========================================
-  AppInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Roles:
-        - LabRole
-
-  # ==========================================
   # INSTANCIA EC2 PRINCIPAL
+  # La instancia EC2 ejecuta Amazon Linux 2023, instala:
+  # Java 25 (Corretto), 
+  # Tomcat 11, 
+  # MySQL 8, 
+  # configura SSL con un certificado autofirmado y 
+  # despliega automáticamente el archivo app.war reaccionando a eventos de SQS.
   # ==========================================
   AppInstance:
     Type: AWS::EC2::Instance
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+        Count: 1
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              jq: []
+              tar: []
+              wget: []
+              openssl: []
+          files:
+            /usr/local/bin/deploy-war.sh:
+              mode: "000755"
+              owner: root
+              group: root
+              content: |
+                #!/bin/bash
+                BUCKET=$1
+                S3_FILE="s3://$BUCKET/app.war"
+                LOCAL_WAR="/opt/tomcat/webapps/ROOT.war"
+                LOG_FILE="/var/log/tomcat-deployments.log"
+
+                if aws s3 ls "$S3_FILE" > /dev/null 2>&1; then
+                    aws s3 cp "$S3_FILE" /tmp/ROOT.war --quiet
+                    if [ -f "$LOCAL_WAR" ]; then
+                        LOCAL_MD5=$(md5sum "$LOCAL_WAR" | awk '{ print $1 }')
+                        REMOTE_MD5=$(md5sum /tmp/ROOT.war | awk '{ print $1 }')
+                        if [ "$LOCAL_MD5" == "$REMOTE_MD5" ]; then
+                            rm -f /tmp/ROOT.war
+                            exit 0
+                        fi
+                    fi
+                    mv /tmp/ROOT.war "$LOCAL_WAR"
+                    chown tomcat:tomcat "$LOCAL_WAR"
+                    
+                    # REGISTRO DE AUDITORÍA: Añade una línea al historial
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ¡ÉXITO! Nuevo archivo app.war detectado en S3 y desplegado en Tomcat." >> "$LOG_FILE"
+                fi
+          commands:
+            01_install_corretto:
+              command: |
+                wget https://corretto.aws/downloads/latest/amazon-corretto-25-x64-linux-jdk.tar.gz -P /tmp/
+                mkdir -p /usr/local/corretto-25
+                tar -xzf /tmp/amazon-corretto-25-x64-linux-jdk.tar.gz -C /usr/local/corretto-25 --strip-components=1
+                rm -f /tmp/amazon-corretto-25-x64-linux-jdk.tar.gz
+                cat <<EOF > /etc/profile.d/java.sh
+                export JAVA_HOME=/usr/local/corretto-25
+                export PATH=/usr/local/corretto-25/bin:\$PATH
+                EOF
+                chmod 644 /etc/profile.d/java.sh
+            02_install_tomcat:
+              command: |
+                wget https://downloads.apache.org/tomcat/tomcat-11/v11.0.22/bin/apache-tomcat-11.0.22.tar.gz -P /tmp/
+                mkdir -p /opt/tomcat
+                tar -xzf /tmp/apache-tomcat-11.0.22.tar.gz -C /opt/tomcat --strip-components=1
+                rm -f /tmp/apache-tomcat-11.0.22.tar.gz
+                groupadd -r tomcat || true
+                useradd -r -s /bin/false -g tomcat -d /opt/tomcat tomcat || true
+                chown -R tomcat:tomcat /opt/tomcat
+                chmod +x /opt/tomcat/bin/*.sh
+            03_configure_ssl:
+              command: |
+                mkdir -p /opt/tomcat/conf/ssl
+                # Solicitud segura de Token IMDSv2
+                TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+                PUBLIC_IP=$(curl -s -H "X-aws-ec2-metadata-token: $TOKEN" http://169.254.169.254/latest/meta-data/public-ipv4 || echo "localhost")
+                
+                openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
+                  -subj "/C=ES/ST=Alicante/L=Alicante/O=IES Doctor Balmis/OU=DAM/CN=$PUBLIC_IP" \
+                  -keyout /opt/tomcat/conf/ssl/tomcat.key -out /opt/tomcat/conf/ssl/tomcat.crt
+                chown -R tomcat:tomcat /opt/tomcat/conf/ssl
+                
+                # Configuramos el conector en el puerto 443
+                cat << 'EOF' > /opt/tomcat/conf/server.xml
+                <?xml version="1.0" encoding="UTF-8"?>
+                <Server port="8005" shutdown="SHUTDOWN">
+                  <Listener className="org.apache.catalina.startup.VersionLoggerListener" />
+                  <Listener className="org.apache.catalina.core.AprLifecycleListener" SSLEngine="on" />
+                  <Listener className="org.apache.catalina.core.JreMemoryLeakPreventionListener" />
+                  <Listener className="org.apache.catalina.mbeans.GlobalResourcesLifecycleListener" />
+                  <Listener className="org.apache.catalina.core.ThreadLocalLeakPreventionListener" />
+
+                  <GlobalNamingResources>
+                    <Resource name="UserDatabase" auth="Container"
+                              type="org.apache.catalina.UserDatabase"
+                              description="User database that can be updated and saved"
+                              factory="org.apache.catalina.users.MemoryUserDatabaseFactory"
+                              pathname="conf/tomcat-users.xml" />
+                  </GlobalNamingResources>
+
+                  <Service name="Catalina">
+                    <Connector port="443" protocol="org.apache.coyote.http11.Http11NioProtocol"
+                               maxThreads="150" SSLEnabled="true" scheme="https" secure="true"
+                               clientAuth="false">
+                        <SSLHostConfig sslEnabledProtocols="TLSv1.2+TLSv1.3">
+                            <Certificate certificateFile="conf/ssl/tomcat.crt"
+                                         certificateKeyFile="conf/ssl/tomcat.key"
+                                         type="RSA" />
+                        </SSLHostConfig>
+                    </Connector>
+
+                    <Engine name="Catalina" defaultHost="localhost">
+                      <Realm className="org.apache.catalina.realm.LockOutRealm">
+                        <Realm className="org.apache.catalina.realm.UserDatabaseRealm"
+                               resourceName="UserDatabase"/>
+                      </Realm>
+
+                      <Host name="localhost" appBase="webapps"
+                            unpackWARs="true" autoDeploy="true">
+                        <Valve className="org.apache.catalina.valves.AccessLogValve" directory="logs"
+                               prefix="localhost_access_log" suffix=".txt"
+                               pattern="%h %l %u %t &quot;%r&quot; %s %b" />
+                      </Host>
+                    </Engine>
+                  </Service>
+                </Server>
+                EOF
+                chown tomcat:tomcat /opt/tomcat/conf/server.xml
+            03b_install_mysql:
+              command: |
+                # Registramos el repositorio oficial comunitario de MySQL 8 para arquitecturas EL9 (compatible con AL2023)
+                dnf install -y https://dev.mysql.com/get/mysql80-community-release-el9-4.noarch.rpm
+                # Importamos la firma GPG oficial de MySQL para autorizar y asegurar la instalación limpia de los paquetes
+                rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql
+                # Instalamos el servidor y cliente de MySQL 8 Community Edition
+                dnf install -y mysql-community-server
+            04_secrets_and_services:
+              command: !Sub |
+                # Seteamos en SECRET_VAL el valor del secreto de Secrets Manager. 
+                # Si no está disponible, se reintenta hasta 5 veces con un sleep de 5 segundos entre intentos.
+                # de esta forma, evitamos que la instancia EC2 falle si el secreto aún no está disponible en el momento del arranque.                
+                for i in {1..5}; do
+                    SECRET_VAL=$(aws secretsmanager get-secret-value --secret-id "${AppSecrets}" --region "${AWS::Region}" --query SecretString --output text 2>/dev/null) && break
+                    echo "Esperando a la API de AWS... Reintento \$i/5"
+                    sleep 5
+                done
+
+                if [ -z "$SECRET_VAL" ]; then exit 1; fi
+
+                # Extraemos las credenciales del secreto JSON y las asignamos a variables de entorno.
+                TOMCAT_USER=$(echo "$SECRET_VAL" | jq -r .tomcat_user)
+                TOMCAT_PASS=$(echo "$SECRET_VAL" | jq -r .tomcat_pass)
+                HMAC_SHA_KEY=$(echo "$SECRET_VAL" | jq -r .hmac_sha_key)
+                MYSQL_ROOT_PASS=$(echo "$SECRET_VAL" | jq -r .mysql_root_pass)
+                MYSQL_REMOTE_USER=$(echo "$SECRET_VAL" | jq -r .mysql_remote_user)
+                MYSQL_REMOTE_PASS=$(echo "$SECRET_VAL" | jq -r .mysql_remote_pass)
+
+                # Configuración de Tomcat
+                # Configuramos el usuario administrador de Tomcat.
+                cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
+                <?xml version="1.0" encoding="UTF-8"?>
+                <tomcat-users xmlns="http://tomcat.apache.org/xml" version="1.0">
+                    <role rolename="admin"/>
+                    <role rolename="admin-gui"/>
+                    <role rolename="manager"/>
+                    <role rolename="manager-gui"/>
+                  <user username="$TOMCAT_USER" password="$TOMCAT_PASS" roles="admin,admin-gui,manager,manager-gui"/>
+                </tomcat-users>
+                EOF
+                chown tomcat:tomcat /opt/tomcat/conf/tomcat-users.xml
+                chmod 644 /opt/tomcat/conf/tomcat-users.xml
+
+                # Configuramos el acceso remoto a Tomcat Manager y Host Manager para permitir conexiones desde cualquier IP.
+                # Sobrescribimos context.xml por completo eliminando la válvula de restricción para evitar errores de parseo multilínea en Tomcat 11.
+                cat << 'EOF' > /tmp/clean-context.xml
+                <?xml version="1.0" encoding="UTF-8"?>
+                <Context antiResourceLocking="false" privileged="true" >
+                  <CookieProcessor className="org.apache.tomcat.util.http.Rfc6265CookieProcessor" sameSiteCookies="strict" />
+                  <Manager sessionAttributeValueClassNameFilter="java\.lang\.(?:Boolean|Integer|Long|Number|String)|org\.apache\.catalina\.filters\.CsrfPreventionFilter\$LruCache(?:\$1)?|java\.util\.(?:Linked)?HashMap"/>
+                </Context>
+                EOF
+                cp /tmp/clean-context.xml /opt/tomcat/webapps/manager/META-INF/context.xml
+                cp /tmp/clean-context.xml /opt/tomcat/webapps/host-manager/META-INF/context.xml
+                chown tomcat:tomcat /opt/tomcat/webapps/manager/META-INF/context.xml
+                chown tomcat:tomcat /opt/tomcat/webapps/host-manager/META-INF/context.xml
+
+                # MySQL 8 Setup
+                # Instalamos y configuramos MySQL 8, habilitamos el servicio y creamos un usuario remoto con todos los privilegios.
+                systemctl enable mysqld
+                systemctl start mysqld
+
+                # Esperamos 5 segundos para asegurar que el log se escribe por completo
+                sleep 5
+
+                # Extraemos la contraseña temporal autogenerada por MySQL 8 en los logs de inicialización segura del sistema.
+                TEMP_PASS=$(grep 'temporary password' /var/log/mysqld.log | awk '{print $NF}')
+
+                # 1. Cambiamos la contraseña de root (SOLO ejecutamos ALTER USER para evitar el ERROR 1820)
+                mysql --user=root --password="$TEMP_PASS" --connect-expired-password -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '$MYSQL_ROOT_PASS';"
+                # 2. Creamos el usuario remoto usando ya la nueva contraseña de root
+                mysql -u root -p"$MYSQL_ROOT_PASS" -e "CREATE USER '$MYSQL_REMOTE_USER'@'%' IDENTIFIED BY '$MYSQL_REMOTE_PASS';"               
+                # 3. Asignamos los privilegios globales al usuario remoto
+                mysql -u root -p"$MYSQL_ROOT_PASS" -e "GRANT ALL PRIVILEGES ON *.* TO '$MYSQL_REMOTE_USER'@'%' WITH GRANT OPTION;"
+
+                # Configuramos MySQL 8 para permitir conexiones remotas desde cualquier IP.
+                if grep -q "bind-address" /etc/my.cnf 2>/dev/null; then
+                    sed -i 's/^.*bind-address.*/bind-address = 0.0.0.0/' /etc/my.cnf
+                else
+                    echo -e "\n[mysqld]\nbind-address = 0.0.0.0" >> /etc/my.cnf
+                fi
+                systemctl restart mysqld
+
+                # Systemd Tomcat
+                # Creamos un servicio systemd para Tomcat, configurando las variables de entorno necesarias 
+                # y asegurando que se inicie automáticamente al arrancar la instancia.
+                # Nota: Se añade AmbientCapabilities para permitir enlazar el puerto privilegiado 443 como usuario 'tomcat'.
+                cat <<EOF > /etc/systemd/system/tomcat.service
+                [Unit]
+                Description=Apache Tomcat 11 Web Application Container
+                After=network-online.target
+                Wants=network-online.target
+                [Service]
+                Type=forking
+                AmbientCapabilities=CAP_NET_BIND_SERVICE
+                User=tomcat
+                Group=tomcat
+                RestartSec=10
+                Restart=always
+                Environment="JAVA_HOME=/usr/local/corretto-25"
+                Environment="PATH=/usr/local/corretto-25/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+                Environment="CATALINA_HOME=/opt/tomcat"
+                Environment="CATALINA_BASE=/opt/tomcat"
+                Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
+                Environment="JAVA_OPTS=-Djava.awt.headless=true -Djava.security.egd=file:/dev/./urandom"
+                Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseParallelGC"
+                Environment="HMAC_SHA_KEY=$HMAC_SHA_KEY"
+                Environment="DB_HOST=localhost"
+                Environment="MYSQL_REMOTE_USER=$MYSQL_REMOTE_USER"
+                Environment="MYSQL_REMOTE_PASS=$MYSQL_REMOTE_PASS"
+                ExecStart=/opt/tomcat/bin/startup.sh
+                ExecStop=/opt/tomcat/bin/shutdown.sh
+                [Install]
+                WantedBy=multi-user.target
+                EOF
+
+                chmod 644 /etc/systemd/system/tomcat.service
+                systemctl daemon-reload
+                systemctl enable tomcat
+                systemctl start tomcat
+
+                # =======================================================
+                # CONFIGURACIÓN DEL LISTENER SQS No usaremos cron
+                # =======================================================
+                # Creamos el script daemon que escucha continuamente la cola de mensajería SQS.
+                # Al procesar mediante Long Polling de 20 segundos, la API mantiene la conexión abierta de forma eficiente,
+                # respondiendo al instante tras la subida a S3 sin malgastar ráfagas de CPU calculando hashes.
+                cat << 'EOF' > /usr/local/bin/sqs-listener.sh
+                #!/bin/bash
+                QUEUE_URL=$1
+                BUCKET_NAME=$2
+
+                while true; do
+                    # Long polling de 20 segundos para reaccionar al instante consumiendo 0 CPU
+                    MESSAGE=$(aws sqs receive-message --queue-url "$QUEUE_URL" --wait-time-seconds 20 --max-number-of-messages 1 --region ${AWS::Region} 2>/dev/null)
+                    
+                    if [ ! -z "$MESSAGE" ] && echo "$MESSAGE" | grep -q "ReceiptHandle"; then
+                        HANDLE=$(echo "$MESSAGE" | jq -r '.Messages[0].ReceiptHandle')
+                        
+                        # Invocamos el script existente de despliegue
+                        /usr/local/bin/deploy-war.sh "$BUCKET_NAME"
+                        
+                        # Confirmamos el procesamiento borrando el mensaje de la cola
+                        aws sqs delete-message --queue-url "$QUEUE_URL" --receipt-handle "$HANDLE" --region ${AWS::Region}
+                    fi
+                    sleep 2
+                done
+                EOF
+
+                chmod 755 /usr/local/bin/sqs-listener.sh
+
+                # Creación del servicio Systemd para mantener el daemon activo permanentemente en el sistema.
+                cat <<EOF > /etc/systemd/system/sqs-listener.service
+                [Unit]
+                Description=SQS Long Polling Listener para Despliegues Automatizados S3
+                After=network-online.target
+                Wants=network-online.target
+
+                [Service]
+                Type=simple
+                User=root
+                Restart=always
+                RestartSec=5
+                ExecStart=/usr/local/bin/sqs-listener.sh "${DeployQueue}" "${AppDeploymentBucket}"
+
+                [Install]
+                WantedBy=multi-user.target
+                EOF
+
+                chmod 644 /etc/systemd/system/sqs-listener.service
+                systemctl daemon-reload
+                systemctl enable sqs-listener
+                systemctl start sqs-listener
     Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "Servidor-Aplicacion-DAM-${AWS::StackName}"
       InstanceType: !Ref InstanceType
       ImageId: !Ref AmiId
       KeyName: !Ref KeyName
       SubnetId: !Ref SubnetId
-      IamInstanceProfile: !Ref AppInstanceProfile
+      IamInstanceProfile: LabInstanceProfile
       SecurityGroupIds:
         - !Ref AppSecurityGroup
       BlockDeviceMappings:
@@ -148,186 +479,17 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          set -e
+          # 1. Mitigar el corte de red provocado por la asignación de la Elastic IP.
+          sleep 12
 
-          # Actualización e instalación de dependencias base
-          yum update -y
-          yum install -y jq tar wget aws-cli mariadb105-server openssl cronie
+          # 2. INSTALAR OBLIGATORIAMENTE LAS HERRAMIENTAS DE CLOUDFORMATION PARA AL2023
+          dnf install -y aws-cfn-bootstrap
 
-          # ==============================================================================
-          # 1. INSTALACIÓN DE AMAZON CORRETTO 25
-          # ==============================================================================
-          wget https://corretto.aws/downloads/latest/amazon-corretto-25-x64-linux-jdk.tar.gz -P /tmp/
-          mkdir -p /usr/local/corretto-25
-          tar -xzf /tmp/amazon-corretto-25-x64-linux-jdk.tar.gz -C /usr/local/corretto-25 --strip-components=1
-          rm -f /tmp/amazon-corretto-25-x64-linux-jdk.tar.gz
+          # 3. Ejecutar cfn-init ahora que el binario sí existe
+          /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region}
 
-          cat <<EOF > /etc/profile.d/java.sh
-          export JAVA_HOME=/usr/local/corretto-25
-          export PATH=/usr/local/corretto-25/bin:\$PATH
-          EOF
-          chmod 644 /etc/profile.d/java.sh
-          source /etc/profile.d/java.sh
-
-          # ==============================================================================
-          # 2. INSTALACIÓN DE APACHE TOMCAT 11
-          # ==============================================================================
-          wget https://downloads.apache.org/tomcat/tomcat-11/v11.0.22/bin/apache-tomcat-11.0.22.tar.gz -P /tmp/
-          mkdir -p /opt/tomcat
-          tar -xzf /tmp/apache-tomcat-11.0.22.tar.gz -C /opt/tomcat --strip-components=1
-          rm -f /tmp/apache-tomcat-11.0.22.tar.gz
-
-          groupadd -r tomcat
-          useradd -r -s /bin/false -g tomcat -d /opt/tomcat tomcat
-          chown -R tomcat:tomcat /opt/tomcat
-          sh -c 'chmod +x /opt/tomcat/bin/*.sh'
-
-          # ==============================================================================
-          # 3. CERTIFICADO SSL/TLS Y CONFIGURACIÓN TOMCAT (PUERTO 443)
-          # ==============================================================================
-          mkdir -p /opt/tomcat/conf/ssl
-          PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 || echo "localhost")
-          
-          openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
-            -subj "/C=ES/ST=Alicante/L=Alicante/O=IES Doctor Balmis/OU=DAM/CN=\$PUBLIC_IP" \
-            -keyout /opt/tomcat/conf/ssl/tomcat.key -out /opt/tomcat/conf/ssl/tomcat.crt
-          chown -R tomcat:tomcat /opt/tomcat/conf/ssl
-
-          # Deshabilitar el puerto 8080 nativo e inyectar el conector SSL en 443
-          sed -i '/<Connector port="8080"/,/\/>/d' /opt/tomcat/conf/server.xml
-          sed -i '/<Service name="Catalina">/a \
-              <Connector port="443" protocol="org.apache.coyote.http11.Http11NioProtocol" \
-                         maxThreads="150" SSLEnabled="true" scheme="https" secure="true" \
-                         clientAuth="false" sslProtocol="TLS"> \
-                  <SSLHostConfig> \
-                      <Certificate certificateFile="conf/ssl/tomcat.crt" \
-                                   certificateKeyFile="conf/ssl/tomcat.key" \
-                                   type="RSA" /> \
-                  </SSLHostConfig> \
-              </Connector>' /opt/tomcat/conf/server.xml
-
-          # ==============================================================================
-          # 4. INTEGRACIÓN DE SECRETOS (TOMCAT & MYSQL)
-          # ==============================================================================
-          SECRET_VAL=$(aws secretsmanager get-secret-value --secret-id "${AppSecrets}" --region "${AWS::Region}" --query SecretString --output text)
-          DB_USER=$(echo "\$SECRET_VAL" | jq -r .db_user)
-          DB_PASS=$(echo "\$SECRET_VAL" | jq -r .db_pass)
-          TOMCAT_USER=$(echo "\$SECRET_VAL" | jq -r .tomcat_user)
-          TOMCAT_PASS=$(echo "\$SECRET_VAL" | jq -r .tomcat_pass)
-          HMAC_SHA_KEY=$(echo "\$SECRET_VAL" | jq -r .hmac_sha_key)
-          MYSQL_ROOT_PASS=$(echo "\$SECRET_VAL" | jq -r .mysql_root_pass)
-          MYSQL_REMOTE_USER=$(echo "\$SECRET_VAL" | jq -r .mysql_remote_user)
-          MYSQL_REMOTE_PASS=$(echo "\$SECRET_VAL" | jq -r .mysql_remote_pass)
-
-          cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
-          <?xml version="1.0" encoding="UTF-8"?>
-          <tomcat-users xmlns="http://tomcat.apache.org/xml" version="1.0">
-              <role rolename="admin"/>
-              <role rolename="admin-gui"/>
-              <role rolename="manager"/>
-              <role rolename="manager-gui"/>
-            <user username="\$TOMCAT_USER" password="\$TOMCAT_PASS" roles="admin,admin-gui,manager,manager-gui"/>
-          </tomcat-users>
-          EOF
-          chown tomcat:tomcat /opt/tomcat/conf/tomcat-users.xml
-          chmod 644 /opt/tomcat/conf/tomcat-users.xml
-
-          sed -i 's|allow="[^"]*"|allow=".*"|g' /opt/tomcat/webapps/manager/META-INF/context.xml
-          sed -i 's|allow="[^"]*"|allow=".*"|g' /opt/tomcat/webapps/host-manager/META-INF/context.xml
-
-          # ==============================================================================
-          # 5. INSTALACIÓN Y CONFIGURACIÓN DE MYSQL SERVER
-          # ==============================================================================
-          systemctl enable mariadb
-          systemctl start mariadb
-
-          mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '\$MYSQL_ROOT_PASS'; FLUSH PRIVILEGES;" || \
-          mysql -u root -e "SET PASSWORD FOR 'root'@'localhost' = PASSWORD('\$MYSQL_ROOT_PASS'); FLUSH PRIVILEGES;"
-
-          mysql -u root -p"\$MYSQL_ROOT_PASS" -e "CREATE USER '\$MYSQL_REMOTE_USER'@'%' IDENTIFIED BY '\$MYSQL_REMOTE_PASS';"
-          mysql -u root -p"\$MYSQL_ROOT_PASS" -e "GRANT ALL ON *.* TO '\$MYSQL_REMOTE_USER'@'%'; FLUSH PRIVILEGES;"
-
-          if grep -q "bind-address" /etc/my.cnf.d/mariadb-server.cnf 2>/dev/null; then
-              sed -i 's/^.*bind-address.*/bind-address = 0.0.0.0/' /etc/my.cnf.d/mariadb-server.cnf
-          else
-              echo -e "\n[mysqld]\nbind-address = 0.0.0.0" >> /etc/my.cnf
-          fi
-          systemctl restart mariadb
-
-          # ==============================================================================
-          # 6. UNIDAD DE SERVICIO SYSTEMD DE TOMCAT
-          # ==============================================================================
-          cat <<EOF > /etc/systemd/system/tomcat.service
-          [Unit]
-          Description=Apache Tomcat 11 Web Application Container
-          After=network-online.target
-          Wants=network-online.target
-
-          [Service]
-          Type=forking
-          User=tomcat
-          Group=tomcat
-          RestartSec=10
-          Restart=always
-
-          Environment="JAVA_HOME=/usr/local/corretto-25"
-          Environment="PATH=/usr/local/corretto-25/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
-          Environment="CATALINA_HOME=/opt/tomcat"
-          Environment="CATALINA_BASE=/opt/tomcat"
-          Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
-          Environment="JAVA_OPTS=-Djava.awt.headless=true -Djava.security.egd=file:/dev/./urandom"
-          Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseParallelGC"
-
-          Environment="HMAC_SHA_KEY=\$HMAC_SHA_KEY"
-          Environment="DB_HOST=localhost"
-          Environment="DB_USER=\$DB_USER"
-          Environment="DB_PASS=\$DB_PASS"
-
-          ExecStart=/opt/tomcat/bin/startup.sh
-          ExecStop=/opt/tomcat/bin/shutdown.sh
-
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-
-          chmod 644 /etc/systemd/system/tomcat.service
-          systemctl daemon-reload
-          systemctl enable tomcat
-          systemctl start tomcat
-
-          # ==============================================================================
-          # 7. AGENTE DE DESPLIEGUE CONTINUO DESDE S3 (CRON)
-          # ==============================================================================
-          cat <<'EOF' > /usr/local/bin/deploy-war.sh
-          #!/bin/bash
-          BUCKET=$1
-          S3_FILE="s3://$BUCKET/app.war"
-          LOCAL_WAR="/opt/tomcat/webapps/ROOT.war"
-
-          # Si el fichero existe en S3, lo tratamos
-          if aws s3 ls "$S3_FILE" > /dev/null 2>&1; then
-              aws s3 cp "$S3_FILE" /tmp/ROOT.war --quiet
-              
-              # Solo sobrescribimos si el archivo es diferente (evita reiniciar la app en bucle)
-              if [ -f "$LOCAL_WAR" ]; then
-                  LOCAL_MD5=$(md5sum "$LOCAL_WAR" | awk '{ print $1 }')
-                  REMOTE_MD5=$(md5sum /tmp/ROOT.war | awk '{ print $1 }')
-                  if [ "$LOCAL_MD5" == "$REMOTE_MD5" ]; then
-                      rm -f /tmp/ROOT.war
-                      exit 0
-                  fi
-              fi
-              
-              # Desplegar la nueva versión
-              mv /tmp/ROOT.war "$LOCAL_WAR"
-              chown tomcat:tomcat "$LOCAL_WAR"
-          fi
-          EOF
-          
-          chmod +x /usr/local/bin/deploy-war.sh
-          systemctl enable crond
-          systemctl start crond
-          echo "*/5 * * * * root /usr/local/bin/deploy-war.sh ${AppDeploymentBucket}" >> /etc/crontab
+          # 4. Enviar la señal de estado de retorno a CloudFormation
+          /opt/aws/bin/cfn-signal -e $? --stack ${AWS::StackName} --resource AppInstance --region ${AWS::Region}
 
 Outputs:
   PublicIpAddress:
