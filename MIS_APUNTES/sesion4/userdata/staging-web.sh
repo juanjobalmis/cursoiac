@@ -1,7 +1,4 @@
 #!/bin/bash
-
-set -e
-
 # Actualización del sistema e instalación de dependencias requeridas
 yum update -y
 yum install -y jq amazon-efs-utils tar wget aws-cli
@@ -32,10 +29,10 @@ tar -xzf /tmp/apache-tomcat-11.0.22.tar.gz -C /opt/tomcat --strip-components=1
 rm -f /tmp/apache-tomcat-11.0.22.tar.gz
 
 # Creación exclusiva del grupo y usuario del sistema sin privilegios de shell
-groupadd -r tomcat
-useradd -r -s /bin/false -g tomcat -d /opt/tomcat tomcat
+groupadd -r tomcat || true
+useradd -r -s /bin/false -g tomcat -d /opt/tomcat tomcat || true
 chown -R tomcat:tomcat /opt/tomcat
-sh -c 'chmod +x /opt/tomcat/bin/*.sh'
+chmod +x /opt/tomcat/bin/*.sh
 
 # ==============================================================================
 # 3. MONTAJE INTEGRADO DEL SISTEMA DE ARCHIVOS DISTRIBUIDO (AWS EFS)
@@ -73,97 +70,70 @@ HMAC_SHA_KEY=$(echo "$SECRET_VAL" | jq -r .hmac_sha_key)
 # Generación del archivo tomcat-users.xml alineado con el esquema formal de Tomcat 11
 cat <<EOF > /opt/tomcat/conf/tomcat-users.xml
 <?xml version="1.0" encoding="UTF-8"?>
-<tomcat-users xmlns="http://tomcat.apache.org/xml"
-              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-              xsi:schemaLocation="http://tomcat.apache.org/xml tomcat-users.xsd"
-              version="1.0">
+<tomcat-users xmlns="http://tomcat.apache.org/xml" version="1.0">
     <role rolename="admin"/>
     <role rolename="admin-gui"/>
     <role rolename="manager"/>
     <role rolename="manager-gui"/>
-  <user username="$TOMCAT_USER" password="$TOMCAT_PASS" roles="admin,admin-gui,manager,manager-gui"/>
+    <user username="$TOMCAT_USER" password="$TOMCAT_PASS" roles="admin,admin-gui,manager,manager-gui"/>
 </tomcat-users>
 EOF
 chown tomcat:tomcat /opt/tomcat/conf/tomcat-users.xml
-chmod 666 /opt/tomcat/conf/tomcat-users.xml
+chmod 644 /opt/tomcat/conf/tomcat-users.xml
 
-# CORRECCIÓN DE ROBUSTEZ: Eliminamos las restricciones de acceso a la consola de administración 
-# y al gestor de aplicaciones en context.xml para permitir el acceso desde cualquier dirección IP
-sed -i 's|allow="[^"]*"|allow=".*"|g' /opt/tomcat/webapps/manager/META-INF/context.xml
-sed -i 's|allow="[^"]*"|allow=".*"|g' /opt/tomcat/webapps/host-manager/META-INF/context.xml
+# Configuramos el acceso remoto a Tomcat Manager y Host Manager para permitir conexiones desde cualquier IP.
+# Sobrescribimos context.xml por completo eliminando la válvula de restricción para evitar errores de parseo multilínea en Tomcat 11.
+cat << 'EOF' > /tmp/clean-context.xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Context antiResourceLocking="false" privileged="true" >
+    <CookieProcessor className="org.apache.tomcat.util.http.Rfc6265CookieProcessor" sameSiteCookies="strict" />
+    <Manager sessionAttributeValueClassNameFilter="java\.lang\.(?:Boolean|Integer|Long|Number|String)|org\.apache\.catalina\.filters\.CsrfPreventionFilter\$LruCache(?:\$1)?|java\.util\.(?:Linked)?HashMap"/>
+</Context>
+EOF
+cp /tmp/clean-context.xml /opt/tomcat/webapps/manager/META-INF/context.xml
+cp /tmp/clean-context.xml /opt/tomcat/webapps/host-manager/META-INF/context.xml
+chown tomcat:tomcat /opt/tomcat/webapps/manager/META-INF/context.xml
+chown tomcat:tomcat /opt/tomcat/webapps/host-manager/META-INF/context.xml
 
 # ==============================================================================
 # 6. DEFINICIÓN DE LA UNIDAD DE SERVICIO SYSTEMD (TIPO SIMPLE)
 # ==============================================================================
-# Creación de la unidad del ciclo de vida bajo la estructura óptima de primer plano
+# Creamos un servicio systemd para Tomcat, configurando las variables de entorno necesarias 
+# y asegurando que se inicie automáticamente al arrancar la instancia.
 cat <<EOF > /etc/systemd/system/tomcat.service
 [Unit]
 Description=Apache Tomcat 11 Web Application Container
-After=network-online.target remote-fs.target
+After=network-online.target
 Wants=network-online.target
-RequiresMountsFor=/opt/tomcat/webapps/ROOT/uploads
-
 [Service]
-# Monitoreo directo del hilo de ejecución de la JVM de Java
-# Type=simple (ALT)
 Type=forking
-
+AmbientCapabilities=CAP_NET_BIND_SERVICE
 User=tomcat
 Group=tomcat
 RestartSec=10
 Restart=always
-
-# Definición de variables globales del entorno de runtime de Java
 Environment="JAVA_HOME=/usr/local/corretto-25"
 Environment="PATH=/usr/local/corretto-25/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
 Environment="CATALINA_HOME=/opt/tomcat"
 Environment="CATALINA_BASE=/opt/tomcat"
 Environment="CATALINA_PID=/opt/tomcat/temp/tomcat.pid"
-
-# Parámetros de ajuste de rendimiento de la máquina virtual de Java 25
 Environment="JAVA_OPTS=-Djava.awt.headless=true -Djava.security.egd=file:/dev/./urandom"
-
-# Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseG1GC" (ALT)
 Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseParallelGC"
-
-# Variables de configuración del backend de la aplicación
 Environment="HMAC_SHA_KEY=$HMAC_SHA_KEY"
-Environment="DB_HOST=${db_host}"
-Environment="DB_USER=$DB_USER"
-Environment="DB_PASS=$DB_PASS"
-
-# Comando de arranque nativo que no bifurca el proceso de ejecución de Systemd
-# ExecStart=/opt/tomcat/bin/catalina.sh run (ALT)
+Environment="DB_HOST=localhost"
+Environment="MYSQL_REMOTE_USER=$DB_USER"
+Environment="MYSQL_REMOTE_PASS=$DB_PASS"
 ExecStart=/opt/tomcat/bin/startup.sh
 ExecStop=/opt/tomcat/bin/shutdown.sh
-
-# Aislamiento y Concesión Segura de Capacidades a Nivel de Proceso (ALT)
-# AmbientCapabilities=CAP_NET_BIND_SERVICE
-# CapabilityBoundingSet=CAP_NET_BIND_SERVICE
-# SecureBits=keep-caps
-# PrivateTmp=true
-# NoNewPrivileges=true
-# SuccessExitStatus=143
-
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Asignación de permisos correctos al archivo unitario del servicio de Systemd
+# Configuración de permisos y habilitación del servicio para 
+# iniciar automáticamente al arrancar el sistema
 chmod 644 /etc/systemd/system/tomcat.service
-
-# ==============================================================================
-# 7. INICIALIZACIÓN Y VALIDACIÓN DEL SISTEMA
-# ==============================================================================
-# Sincronización del demonio de Systemd para cargar la nueva configuración
 systemctl daemon-reload
-
-# Habilitación y arranque ordenado del servicio Tomcat
 systemctl enable tomcat
 systemctl start tomcat
-
-# Validación del estado del servicio y verificación de puertos abiertos
-systemctl status tomcat --no-pager -l
-netstat -at
 
 echo "Aprovisionamiento y optimización de Apache Tomcat 11 y Java 25 completados con éxito."

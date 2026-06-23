@@ -340,29 +340,22 @@ Esto descargaría la aplicación `mi-autenticacion` v1.0.0 del Serverless Repo y
 
 Internamente, un **`AWS::Serverless::Application`** se convierte en un `AWS::CloudFormation::Stack` anidado. La ventaja de usar la sintaxis SAM es la facilidad de referenciar aplicaciones del SAR (ya maneja ApplicationId, etc.) cosa que CloudFormation puro no tiene directamente. Además SAM añade automáticamente algunas etiquetas para rastrear orígenes cuando proviene del SAR.
 
-==**AQUII !!!**==
-
 Este recurso es muy útil para fomentar la **reutilización y composición** de aplicaciones serverless. Por ejemplo, AWS publica muchas *SAR patterns* (en **[Serverless Land](https://serverlessland.com/)**) que uno puede incorporar en sus soluciones con un par de líneas usando `AWS::Serverless::Application`. También en equipos grandes, se pueden encapsular componentes comunes (p.ej. un módulo de autenticación, un módulo de notificaciones) en plantillas separadas y luego integrarlos fácilmente.
 
 En cuanto a *outputs*, SAM permite recuperar outputs de la aplicación anidada vía `Outputs.NombreOutput` en Fn::GetAtt o Ref, lo cual nos da enlace entre stacks. Por ejemplo si la app anidada exporta un ARN, podemos usar `!GetAtt MyAuthSystem.Outputs.ArnDelUsuario`.
 
 En resumen, **AWS::Serverless::Application** nos da una forma poderosa de traer funcionalidades completas a nuestra app sin reinventar la rueda, aprovechando la naturaleza modular de CloudFormation pero con la simplicidad de SAM para aplicaciones serverless.
 
----
+### Recurso AWS::Serverless::SimpleTable
 
-
-## Recurso **AWS::Serverless::SimpleTable**
 Este recurso provee una manera rápida de crear una tabla DynamoDB simple, con un esquema mínimo (solo clave primaria). Es útil cuando solo necesitamos almacenar datos con una clave primaria y no requerimos configuraciones avanzadas de DynamoDB. Al definir `AWS::Serverless::SimpleTable`, SAM creará un recurso subyacente `AWS::DynamoDB::Table` con:
+
 * Una clave primaria llamada **id** de tipo String por defecto (o la que indiquemos en la propiedad `PrimaryKey`).
 * Modo de pago `PAY_PER_REQUEST` (a demanda) por defecto, a menos que especifiquemos `ProvisionedThroughput` para capacidad aprovisionada.
 * Encriptación habilitada (SSE) si lo indicamos con `SSESpecification`, etc., pero sin opción de definir índices secundarios ni cosas complejas (para eso tendríamos que ir a `AWS::DynamoDB::Table` normal).
 
 Básicamente está pensado para casos sencillos: por ejemplo, una tabla para almacenar sesiones, o configurar un par de tablas para una demo, sin preocuparse de todos los detalles de throughput, índices, etc. De hecho, la documentación de SAM aconseja que *para cosas avanzadas, usemos AWS::DynamoDB::Table normal*, incluso dentro de la plantilla SAM podemos hacerlo sin problemas. `SimpleTable` es un azúcar sintáctico.
 
----
-
-
-## Recurso **AWS::Serverless::SimpleTable** (y II)
 ```yaml
 UsersTable:
   Type: AWS::Serverless::SimpleTable
@@ -374,15 +367,14 @@ UsersTable:
       ReadCapacityUnits: 5
       WriteCapacityUnits: 5
 ```
+
 Esto crearía una tabla DynamoDB llamada (según el stack) `UsersTable` con `userId` como clave de partición, y throughput fijo de 5 RCUs/WCUs. Si omitiéramos `ProvisionedThroughput`, la capacidad sería a demanda; si omitiéramos `PrimaryKey`, sería una clave `id` de tipo `String` por defecto.
 
-Resumiendo, **AWS::Serverless::SimpleTable** es una manera rápida de obtener una tabla DynamoDB funcional con mínimas opciones. Es ideal en tutoriales, ejemplos rápidos, o cuando sabemos que solo necesitamos un almacenamiento clave-valor simple. Si luego los requisitos crecen, siempre podríamos reemplazarla por un recurso DynamoDB completo para mayor control. 
+Resumiendo, **AWS::Serverless::SimpleTable** es una manera rápida de obtener una tabla DynamoDB funcional con mínimas opciones. Es ideal en tutoriales, ejemplos rápidos, o cuando sabemos que solo necesitamos un almacenamiento clave-valor simple. Si luego los requisitos crecen, siempre podríamos reemplazarla por un recurso DynamoDB completo para mayor control.
 
----
+### Recurso AWS::Serverless::StateMachine
 
-
-## Recurso **AWS::Serverless::StateMachine**
-Este recurso permite definir una **máquina de estados de Step Functions** de forma abreviada. AWS Step Functions orquesta flujos de trabajo mediante un diagrama de estados. Con `AWS::Serverless::StateMachine` podemos incluir esa definición de flujo dentro de nuestra plantilla SAM y beneficiarnos de integraciones fáciles con otros recursos. Este ejemplo define una máquina con un único estado que ejecuta una función Lambda y termina. La invocación de la máquina se realiza a través de una petición POST a un endpoint.
+Este recurso permite definir una **máquina de estados de Step Functions** de forma abreviada. **AWS Step Functions orquesta flujos de trabajo mediante un diagrama de estados**. Con `AWS::Serverless::StateMachine` podemos incluir esa definición de flujo dentro de nuestra plantilla SAM y beneficiarnos de integraciones fáciles con otros recursos. Este ejemplo define una máquina con un único estado que ejecuta una función Lambda y termina. La invocación de la máquina se realiza a través de una petición POST a un endpoint.
 
 ```yaml
 MyWorkflow:
@@ -403,14 +395,11 @@ MyWorkflow:
           Method: post
 ```
 
+## Ejemplos y repositorios de recursos de AWS SAM
 
----
-
-
-# Ejemplos y repositorios de recursos de AWS SAM
-* [Serverless Land Patterns](https://serverlessland.com/patterns?framework=AWS+SAM) - Colección mantenida por AWS con decenas de patrones serverless listos para usar, filtrables por framework (en nuestro caso SAM) y por servicios involucrados. Cada patrón incluye la plantilla SAM (u otro IaC) y código necesario para una integración concreta entre servicios (por ejemplo "API Gateway -> Lambda -> DynamoDB" o "S3 -> Lambda -> SQS") que podemos copiar o estudiar para aprender buenas prácticas.
-* [aws-samples/serverless-patterns](https://github.com/aws-samples/serverless-patterns), repositorio de GitHub que almacena todos esos ejemplos. Allí encontramos subdirectorios para cada patrón con instrucciones de despliegue.
+* **[Serverless Land Patterns](https://serverlessland.com/patterns?framework=AWS+SAM)**: Colección mantenida por AWS con decenas de patrones serverless listos para usar, filtrables por framework (en nuestro caso SAM) y por servicios involucrados. Cada patrón incluye la plantilla SAM (u otro IaC) y código necesario para una integración concreta entre servicios (por ejemplo "**`API Gateway -> Lambda -> DynamoDB`**" o "**`S3 -> Lambda -> SQS`**") que podemos copiar o estudiar para aprender buenas prácticas.
+* **[aws-samples/serverless-patterns](https://github.com/aws-samples/serverless-patterns)**: repositorio de GitHub que almacena todos esos ejemplos. Allí encontramos subdirectorios para cada patrón con instrucciones de despliegue.
 * **Plantillas (blueprints)** disponibles al ejecutar el comando `sam init`. Estos blueprints también son excelentes puntos de partida para explorar diferentes tipos de aplicaciones serverless.
-* [Example Applications dentro de la documentación oficial de AWS SAM](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-example-applications.html), donde guías paso a paso muestran cómo implementar ciertos escenarios (por ejemplo, procesar eventos de S3 con Rekognition, implementar un backend web, etc.). 
+* **[Example Applications dentro de la documentación oficial de AWS SAM](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-example-applications.html)** Encontrarás guías paso a paso muestran cómo implementar ciertos escenarios (por ejemplo, procesar eventos de S3 con Rekognition, implementar un backend web, etc.). 
 
-En resumen, **no estamos solos**: la comunidad y AWS proporcionan muchos ejemplos testeados y probados listos para utilizar. Como único detalle, recordad modificar las plantillas para **incluir el rol de AWS Academy** (`LabRole`) en las **funciones serverless** y en general en todos los recursos que necesiten permisos para interactuar con otros servicios de AWS.
+En resumen, **no estamos solos**: la comunidad y AWS proporcionan muchos ejemplos testeados y probados listos para utilizar. Como único detalle, recordad modificar las plantillas para **incluir el rol de AWS Academy** (**`LabRole`**) en las **funciones serverless** y en general en todos los recursos que necesiten permisos para interactuar con otros servicios de AWS.
